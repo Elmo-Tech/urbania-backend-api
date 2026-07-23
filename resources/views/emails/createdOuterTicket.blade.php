@@ -10,10 +10,6 @@
     <div style="max-width:640px; margin:0 auto; background-color:#ffffff; border:1px solid #e5e7eb; border-radius:12px; padding:32px;">
         <h1 style="margin:0 0 16px; font-size:24px; line-height:1.3; color:#111827;">Ticket accepted successfully.</h1>
 
-        <p style="margin:0 0 12px; font-size:16px; line-height:1.7;">
-            Your ticket has been accepted and created in the system.
-        </p>
-
         <p style="margin:0 0 8px; font-size:16px; line-height:1.7;">
             <strong>Ticket Number:</strong>
             {{ $ticket->ticket_number }}
@@ -30,10 +26,6 @@
             </a>
         </p>
 
-        <p style="margin:0; font-size:14px; line-height:1.7; color:#6b7280;">
-            If the button does not work, open this link:
-            <a href="{{ $editUrl }}" style="color:#2563eb; word-break:break-all;">{{ $editUrl }}</a>
-        </p>
     </div>
 </body>
 </html>

@@ -29,10 +29,6 @@
             Thank you for choosing us!
         </p>
 
-        <p style="margin:0; font-size:13px; line-height:1.7; color:#6b7280;">
-            If the link does not open, use this URL:
-            <a href="{{ $controlUrl }}" style="color:#2563eb; word-break:break-all;">{{ $controlUrl }}</a>
-        </p>
     </div>
 </body>
 </html>

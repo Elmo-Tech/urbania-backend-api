@@ -82,7 +82,7 @@ class OuterTicketController extends Controller
                 $ticket->save();
                 $ticketClient = TicketClientContact::where('ticket_client_id', $ticket->ticket_client_id)->first();
                 
-                if($ticketClient->email){
+                if($ticketClient?->email){
                     Mail::to($ticketClient->email)->send(new OuterTicketCreated($ticket));
                 }
             }

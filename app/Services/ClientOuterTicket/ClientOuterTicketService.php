@@ -67,7 +67,11 @@ class ClientOuterTicketService{
 
     public function updateClientOuterTicket(array $clientOuterTicketData): mixed{
 
-        $clientOuterTicket = ClientOuterTicket::find($clientOuterTicketData['clientOuterTicketId']);
+        $clientOuterTicket = ClientOuterTicket::findOrFail($clientOuterTicketData['clientOuterTicketId']);
+        $currentStatus = (string) $clientOuterTicket->status;
+        $newStatus = (string) ($clientOuterTicketData['status'] ?? 0);
+        $message = $clientOuterTicketData['message'] ?? $clientOuterTicketData['description'] ?? '';
+        $istanzaParameterId = $clientOuterTicketData['istanzaParameterId'] ?? $clientOuterTicketData['tipologiaIstanza'] ?? null;
 
         $clientOuterTicket->firstname = $clientOuterTicketData['firstname'] ?? '';
         $clientOuterTicket->lastname = $clientOuterTicketData['lastname'] ?? '';
@@ -77,36 +81,36 @@ class ClientOuterTicketService{
         $clientOuterTicket->delegated_firstname = $clientOuterTicketData['delegatedFirstname'] ?? '';
         $clientOuterTicket->delegated_lastname = $clientOuterTicketData['delegatedLastname'] ?? '';
         $clientOuterTicket->delegated_phone = $clientOuterTicketData['delegatedPhone'] ?? '';
-        $clientOuterTicket->message = $clientOuterTicketData['message'] ?? '';
+        $clientOuterTicket->message = $message;
         $clientOuterTicket->email = $clientOuterTicketData['email'] ?? '';
         $clientOuterTicket->address = $clientOuterTicketData['address'] ?? '';
         $clientOuterTicket->phone = $clientOuterTicketData['phone'] ?? '';
-        $clientOuterTicket->status = $clientOuterTicketData['status'] ?? 0;
+        $clientOuterTicket->status = $newStatus;
         $clientOuterTicket->anno = $clientOuterTicketData['anno'] ?? '';
         $clientOuterTicket->service_id = $clientOuterTicketData['serviceId'] ?? null;
-        $clientOuterTicket->istanza_parameter_id = $clientOuterTicketData['istanzaParameterId'] ?? null;
+        $clientOuterTicket->istanza_parameter_id = $istanzaParameterId;
         $clientOuterTicket->delegated_role_id = $clientOuterTicketData['delegatedRoleId'] ?? null;
         $clientOuterTicket->client_id = $clientOuterTicketData['clientId'] ?? null;
-        $clientOuterTicket->status_date = $clientOuterTicketData['status'] == $clientOuterTicket->status ? $clientOuterTicket->status_date : Carbon::now();
+        $clientOuterTicket->status_date = $newStatus === $currentStatus ? $clientOuterTicket->status_date : Carbon::now();
 
 
-        $contract = explode("##", $clientOuterTicketData['contractId']);
+        $contract = array_pad(explode("##", (string) ($clientOuterTicketData['contractId'] ?? '')), 2, null);
 
-        $parameterValue = DB::table('parameter_values')->select('description')->where('description', "0")->first();
+        $parameterValue = null;
 
-        if($clientOuterTicketData['urgenza'] != null){
+        if(!empty($clientOuterTicketData['urgenza'])){
             $parameterValue = DB::table('parameter_values')->select('description')->where('id', $clientOuterTicketData['urgenza'])->first();
         }
 
-        if ( ($clientOuterTicket->status != "2" && $clientOuterTicketData['status'] == "2") || $clientOuterTicket->status != "3" && $clientOuterTicketData['status'] == "3") {
+        if (($currentStatus !== "2" && $newStatus === "2") || ($currentStatus !== "3" && $newStatus === "3")) {
             $clientOuterTicket->closer_id = Auth::id();
         }
 
 
-        if($clientOuterTicketData['status'] == 1 && $clientOuterTicket->email_token == null){
+        if($newStatus === "1" && $clientOuterTicket->email_token == null){
             $clientOuterTicket->email_token = str::random(40);
             $afterNotifyDate = null;
-            if($clientOuterTicketData['notifyDate'] != null){
+            if(!empty($clientOuterTicketData['notifyDate'])){
                 $date = Carbon::parse($clientOuterTicketData['notifyDate']);
                 $afterNotifyDate = $date->addDays(60);
             }
@@ -114,62 +118,82 @@ class ClientOuterTicketService{
             $clientOuterTicket->notify_date = $afterNotifyDate;
         }
 
-        $ticketClientId = null;
+        $ticketClientId = $clientOuterTicket->ticket_client_id;
+        $requestTicketClientId = $clientOuterTicketData['ticketClientId'] ?? null;
+        $clientIdentity = $clientOuterTicketData['cf'] ?? $clientOuterTicketData['pIva'] ?? null;
 
-        if($clientOuterTicketData['ticketClientId'] === "0"){
+        if($requestTicketClientId === "0" || $requestTicketClientId === 0){
 
             $ticketClientId = null;
 
-        } elseif($clientOuterTicketData['ticketClientId'] === "" || $clientOuterTicket->ticketClientId === null) {
+        } elseif($requestTicketClientId === "" || $requestTicketClientId === null) {
 
-            $ticketClient = TicketClient::create([
-                'firstname'=> $clientOuterTicketData['firstname'],
-                'lastname'=> $clientOuterTicketData['lastname'],
-                'company_name'=> $clientOuterTicketData['ragioneSociale'],
-                'national_number'=> $clientOuterTicketData['cf']??$ticketClientData['pIva']??null,
-            ]);
+            if($ticketClientId === null){
+                $ticketClient = TicketClient::create([
+                    'firstname'=> $clientOuterTicketData['firstname'],
+                    'lastname'=> $clientOuterTicketData['lastname'],
+                    'company_name'=> $clientOuterTicketData['ragioneSociale'],
+                    'national_number'=> $clientIdentity,
+                ]);
 
-            $ticketClientContact = TicketClientContact::create([
-                'phone_number'=> $clientOuterTicketData['phone'],
-                'email'=> $clientOuterTicketData['email'],
-                'ticket_client_id' => $ticketClient->id
-            ]);
+                $ticketClientId = $ticketClient->id;
+            } else {
+                $ticketClient = TicketClient::find($ticketClientId);
+            }
 
-            $ticketClientAddress = TicketClientAddress::create([
-                'address'=> $clientOuterTicketData['address'],
-                'city' => $clientOuterTicketData['city']??null,
-                'state' => $clientOuterTicketData['state']??null,
-                'postal_code' => $clientOuterTicketData['postalCode']??null,
-                'ticket_client_id' => $ticketClient->id
-            ]);
+            if($ticketClient){
+                $ticketClient->firstname = $clientOuterTicketData['firstname'];
+                $ticketClient->lastname = $clientOuterTicketData['lastname'];
+                $ticketClient->company_name = $clientOuterTicketData['ragioneSociale'];
+                $ticketClient->national_number = $clientIdentity;
+                $ticketClient->save();
 
-            $ticketClientId = $ticketClient->id;
+                $ticketClientContact = TicketClientContact::firstOrNew([
+                    'ticket_client_id' => $ticketClient->id
+                ]);
+                $ticketClientContact->phone_number = $clientOuterTicketData['phone'];
+                $ticketClientContact->email = $clientOuterTicketData['email'];
+                $ticketClientContact->save();
 
-        } elseif($clientOuterTicketData['ticketClientId'] >= 1){
+                $ticketClientAddress = TicketClientAddress::firstOrNew([
+                    'ticket_client_id' => $ticketClient->id
+                ]);
+                $ticketClientAddress->address = $clientOuterTicketData['address'];
+                $ticketClientAddress->city = $clientOuterTicketData['city'] ?? null;
+                $ticketClientAddress->state = $clientOuterTicketData['state'] ?? null;
+                $ticketClientAddress->postal_code = $clientOuterTicketData['postalCode'] ?? null;
+                $ticketClientAddress->save();
+            }
 
-            $ticketClientId = $clientOuterTicketData['ticketClientId'];
+        } elseif($requestTicketClientId >= 1){
 
-            $ticketClient = TicketClient::find($clientOuterTicketData['ticketClientId']);
+            $ticketClientId = $requestTicketClientId;
 
-            $ticketClient->firstname = $clientOuterTicketData['firstname'];
-            $ticketClient->lastname = $clientOuterTicketData['lastname'];
-            $ticketClient->company_name = $clientOuterTicketData['ragioneSociale'];
-            $ticketClient->national_number = $clientOuterTicketData['cf']??$ticketClientData['pIva']??null;
-            $ticketClient->save();
+            $ticketClient = TicketClient::find($requestTicketClientId);
 
-            $ticketClientContact = TicketClientContact::where('ticket_client_id', $clientOuterTicketData['ticketClientId'])->first();
+            if($ticketClient){
+                $ticketClient->firstname = $clientOuterTicketData['firstname'];
+                $ticketClient->lastname = $clientOuterTicketData['lastname'];
+                $ticketClient->company_name = $clientOuterTicketData['ragioneSociale'];
+                $ticketClient->national_number = $clientIdentity;
+                $ticketClient->save();
 
-            $ticketClientContact->phone_number = $clientOuterTicketData['phone'];
-            $ticketClientContact->email = $clientOuterTicketData['email'];
-            $ticketClientContact->save();
+                $ticketClientContact = TicketClientContact::firstOrNew([
+                    'ticket_client_id' => $requestTicketClientId
+                ]);
+                $ticketClientContact->phone_number = $clientOuterTicketData['phone'];
+                $ticketClientContact->email = $clientOuterTicketData['email'];
+                $ticketClientContact->save();
 
-            $ticketClientAddress = TicketClientAddress::where('ticket_client_id', $clientOuterTicketData['ticketClientId'])->first();
-
-            $ticketClientAddress->address = $clientOuterTicketData['address'];
-            $ticketClientAddress->city = $clientOuterTicketData['city']??null;
-            $ticketClientAddress->state = $clientOuterTicketData['state']??null;
-            $ticketClientAddress->postal_code = $clientOuterTicketData['postalCode']??null;
-            $ticketClientAddress->save();
+                $ticketClientAddress = TicketClientAddress::firstOrNew([
+                    'ticket_client_id' => $requestTicketClientId
+                ]);
+                $ticketClientAddress->address = $clientOuterTicketData['address'];
+                $ticketClientAddress->city = $clientOuterTicketData['city'] ?? null;
+                $ticketClientAddress->state = $clientOuterTicketData['state'] ?? null;
+                $ticketClientAddress->postal_code = $clientOuterTicketData['postalCode'] ?? null;
+                $ticketClientAddress->save();
+            }
 
         }
 
@@ -182,9 +206,9 @@ class ClientOuterTicketService{
         $clientOuterTicket->esito = $clientOuterTicketData['esito'] ?? null;
         $clientOuterTicket->note = $clientOuterTicketData['note'] ?? null;
         $clientOuterTicket->segnalazione = $clientOuterTicketData['segnalazione'] ?? null;
-        $clientOuterTicket->urgenza = $parameterValue->description;
+        $clientOuterTicket->urgenza = $parameterValue->description ?? $clientOuterTicket->urgenza ?? "0";
         $clientOuterTicket->accept_status = $clientOuterTicketData['acceptStatus'] ?? 0;
-        $clientOuterTicket->worker_id = $clientOuterTicketData['workerId'] ?? null;
+        $clientOuterTicket->worker_id = $clientOuterTicketData['workerId'] === "" ? null : ($clientOuterTicketData['workerId'] ?? null);
 
         $clientOuterTicket->save();
 

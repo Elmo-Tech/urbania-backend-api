@@ -17,6 +17,8 @@ class FreeReservationScheduleController extends Controller
 {
     public function index(Request $request)
     {
+        $this->removeExpiredIncompleteReservations();
+
         $clientId = $request->clientId?? Client::where('company_name', $request->clientName)->first()->id;
         $startDate = Carbon::parse($request->startDate);
         $endDate = Carbon::parse($request->endDate);
@@ -133,6 +135,8 @@ class FreeReservationScheduleController extends Controller
 
     public function checkAvailability(Request $request)
     {
+        $this->removeExpiredIncompleteReservations();
+
         $clientId = $request->clientId?? Client::where('company_name', $request->clientName)->first()->id;
         $date = Carbon::parse($request->date);
         $time = Carbon::parse($request->time);
@@ -194,5 +198,16 @@ class FreeReservationScheduleController extends Controller
             'available' => $isAvailable,
             'message' => $isAvailable ? 'The time is available' : 'The time is not available',
         ]);
+    }
+
+    private function removeExpiredIncompleteReservations(): void
+    {
+        Reservation::query()
+            ->where('status', 0)
+            ->where('created_at', '<=', now()->subMinutes(5))
+            ->where(function ($query) {
+                $query->whereNull('email')->orWhere('email', '');
+            })
+            ->delete();
     }
 }

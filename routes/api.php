@@ -579,7 +579,7 @@ Route::prefix('v1/reservations')->group(function(){
     Route::post('create', [ReservationController::class, 'create']);
     Route::get('edit', [ReservationController::class, 'edit']);
     Route::put('update', [ReservationController::class, 'update']);
-    Route::delete('delete', [ReservationController::class, 'delete']);
+    Route::delete('delete', [ReservationController::class, 'destroy']);
 });
 
 Route::prefix('v1/client-reservations')->group(function(){
@@ -618,4 +618,3 @@ Route::prefix('v1/outer-tickets')->group(function(){
 
 Route::get('/microsoft/calendar/events', [MicrosoftCalendarController::class, 'getEvents']);
 Route::post('/microsoft/calendar/create-event', [MicrosoftCalendarController::class, 'createEvent']);
-

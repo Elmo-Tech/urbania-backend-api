@@ -566,7 +566,7 @@ Route::prefix('v1/reservation-schedules')->group(function(){
     Route::post('create', [ReservationScheduleController::class, 'create']);
     Route::get('edit', [ReservationScheduleController::class, 'edit']);
     Route::put('update', [ReservationScheduleController::class, 'update']);
-    Route::delete('delete', [ReservationScheduleController::class, 'delete']);
+    Route::delete('delete', [ReservationScheduleController::class, 'destroy']);
 });
 
 Route::prefix('v1/free-schedules')->group(function(){

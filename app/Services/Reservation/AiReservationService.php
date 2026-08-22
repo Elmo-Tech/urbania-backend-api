@@ -6,6 +6,7 @@ namespace App\Services\Reservation;
 use App\Models\Reservation\Reservation;
 use App\Models\Client;
 use App\Models\ParameterValue;
+use Illuminate\Http\Exceptions\HttpResponseException;
 
 class AiReservationService{
 
@@ -60,6 +61,12 @@ class AiReservationService{
     public function updateReservation(array $reservationData): mixed{
 
         $reservation = Reservation::find($reservationData['reservationId']);
+
+        if (!$reservation) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'La sessione di prenotazione e scaduta. Effettua di nuovo la prenotazione.'
+            ], 401));
+        }
         
         $confirmationToken = $reservationData['status'] == 2? bin2hex(random_bytes(16)):null;
         

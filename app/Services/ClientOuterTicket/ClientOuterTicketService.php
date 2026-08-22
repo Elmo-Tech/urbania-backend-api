@@ -15,6 +15,17 @@ use Illuminate\Support\Str;
 
 class ClientOuterTicketService{
 
+    private function findTicketClientByIdentity(?string $clientIdentity): ?TicketClient
+    {
+        $clientIdentity = is_string($clientIdentity) ? trim($clientIdentity) : $clientIdentity;
+
+        if (empty($clientIdentity)) {
+            return null;
+        }
+
+        return TicketClient::where('national_number', $clientIdentity)->first();
+    }
+
     public function allClientOuterTickets(array $request){
 
         $clientOuterTickets = ClientOuterTicket::with('client')->get();
@@ -26,9 +37,7 @@ class ClientOuterTicketService{
 
         //$newResevationSchedule = ResevationSchedule::find($parameterData['parameterId']);
         $cf = $clientOuterTicketData['cf']??$clientOuterTicketData['pIva']??null;
-        if($cf != null){
-            $ticketClient = TicketClient::where('national_number', $cf)->first();
-        }
+        $ticketClient = $this->findTicketClientByIdentity($cf);
 
         $clientOuterTicket = ClientOuterTicket::create([
             "firstname" => $clientOuterTicketData['firstname']??'',
@@ -129,12 +138,16 @@ class ClientOuterTicketService{
         } elseif($requestTicketClientId === "" || $requestTicketClientId === null) {
 
             if($ticketClientId === null){
-                $ticketClient = TicketClient::create([
-                    'firstname'=> $clientOuterTicketData['firstname'],
-                    'lastname'=> $clientOuterTicketData['lastname'],
-                    'company_name'=> $clientOuterTicketData['ragioneSociale'],
-                    'national_number'=> $clientIdentity,
-                ]);
+                $ticketClient = $this->findTicketClientByIdentity($clientIdentity);
+
+                if(!$ticketClient){
+                    $ticketClient = TicketClient::create([
+                        'firstname'=> $clientOuterTicketData['firstname'],
+                        'lastname'=> $clientOuterTicketData['lastname'],
+                        'company_name'=> $clientOuterTicketData['ragioneSociale'],
+                        'national_number'=> $clientIdentity,
+                    ]);
+                }
 
                 $ticketClientId = $ticketClient->id;
             } else {

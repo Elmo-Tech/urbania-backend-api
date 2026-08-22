@@ -204,7 +204,7 @@ class FreeReservationScheduleController extends Controller
     {
         Reservation::query()
             ->where('status', 0)
-            ->where('created_at', '<=', now()->subMinutes(5))
+            ->where('created_at', '<=', now()->subMinutes(10))
             ->where(function ($query) {
                 $query->whereNull('email')->orWhere('email', '');
             })

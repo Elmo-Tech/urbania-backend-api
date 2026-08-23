@@ -56,8 +56,7 @@ class UploadService
 
     public function readFiles(string $path)
     {
-
-        $fileDirectory = str_replace("-","/",$path);
+        $fileDirectory = str_replace("-", "/", $path);
 
         $paths = Storage::disk('uploads')->files($fileDirectory);
 
@@ -127,14 +126,18 @@ class UploadService
 
     }*/
 
-    public function renameFile(array $data)
+public function renameFile(array $data)
 {
     $location = explode("-", $data['location']);
 
-    // Combine all parts of the location dynamically
-    $fileDirectory = implode('/', $location);
+    $fileDircetoryPart1 = $location[0];
+    $fileDircetoryPart2 = $location[1];
 
-    $newLocation = $fileDirectory . '/';
+    if(isset($location[2])){
+        $fileDircetoryPart2 = $location[1]. "/" .$location[2];
+    }
+
+    $newLocation = $fileDircetoryPart1.'/'.$fileDircetoryPart2.'/';
 
     $oldFileName = $data['oldFileName'];
     $fileName = $data['fileName'];
@@ -159,8 +162,7 @@ class UploadService
     {
 
         $files = $filesData['files'];
-
-        $directory = str_replace("-","/",$filesData['directory']);
+        $directory = str_replace("-", "/", $filesData['directory']);
 
         foreach ($files as $key => $file) {
 

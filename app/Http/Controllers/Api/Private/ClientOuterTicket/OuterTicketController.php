@@ -85,7 +85,7 @@ class OuterTicketController extends Controller
                 $ticket->save();
 
                 $this->uploadService->copyFiles(
-                    'outer-tickets/' . $clientOuterTicket->id,
+                    'outertickets/' . $clientOuterTicket->id,
                     'tickets/' . $ticket->id
                 );
 

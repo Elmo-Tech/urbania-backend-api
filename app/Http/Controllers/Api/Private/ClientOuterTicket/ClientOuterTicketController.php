@@ -37,7 +37,7 @@ class ClientOuterTicketController extends Controller
             foreach ($files as $file) {
                 $this->uploadService->uploadFile([
                     'file' => $file,
-                    'uploadPath' => 'outer-tickets/' . $clientOuterTicket->id
+                    'uploadPath' => 'outertickets/' . $clientOuterTicket->id
                 ]);
             }
 

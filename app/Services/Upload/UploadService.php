@@ -73,6 +73,28 @@ class UploadService
 
     }
 
+    public function copyFiles(string $sourceDirectory, string $destinationDirectory, string $storageDisk = 'uploads'): int
+    {
+        $diskName = $this->storageDisks[$storageDisk] ?? $storageDisk;
+        $disk = Storage::disk($diskName);
+        $sourceDirectory = trim($sourceDirectory, '/');
+        $destinationDirectory = trim($destinationDirectory, '/');
+        $copiedFiles = 0;
+
+        if (!$disk->exists($sourceDirectory)) {
+            return 0;
+        }
+
+        foreach ($disk->allFiles($sourceDirectory) as $filePath) {
+            $relativePath = ltrim(substr($filePath, strlen($sourceDirectory)), '/\\');
+            $destinationPath = $destinationDirectory . '/' . $relativePath;
+            $disk->copy($filePath, $destinationPath);
+            $copiedFiles++;
+        }
+
+        return $copiedFiles;
+    }
+
     /*public function renameFile(array $data)
     {
 

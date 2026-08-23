@@ -43,6 +43,8 @@ class AiClientOuterTicketService{
             'message' => $clientOuterTicketData['message']??'', //messaggio (free text).
             "email" => $clientOuterTicketData['email']??'',
             'address' => $clientOuterTicketData['address']??'',
+            'city' => $clientOuterTicketData['city']??null,
+            'state' => $clientOuterTicketData['state']??null,
             "phone" => $clientOuterTicketData['phone']??'',
             'status' => $clientOuterTicketData['status']??0,
             'anno' => $clientOuterTicketData['anno']??'',

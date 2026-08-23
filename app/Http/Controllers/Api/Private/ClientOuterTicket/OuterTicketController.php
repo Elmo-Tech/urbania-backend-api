@@ -11,6 +11,7 @@ use App\Mail\TicketCreated;
 use App\Models\Ticket;
 use App\Models\TicketClientContact;
 use App\Services\ClientOuterTicket\ClientOuterTicketService;
+use App\Services\Upload\UploadService;
 use App\Utils\PaginateCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,12 +22,14 @@ class OuterTicketController extends Controller
 {
     protected $clientOuterTicketService;
     protected $ticketService;
+    protected $uploadService;
 
-    public function __construct(ClientOuterTicketService $clientOuterTicketService, TicketService $ticketService)
+    public function __construct(ClientOuterTicketService $clientOuterTicketService, TicketService $ticketService, UploadService $uploadService)
     {
         $this->middleware('auth:api');
         $this->clientOuterTicketService = $clientOuterTicketService;
         $this->ticketService = $ticketService;
+        $this->uploadService = $uploadService;
     }
 
     public function index(Request $request){
@@ -80,6 +83,12 @@ class OuterTicketController extends Controller
                 ]);
                 $ticket->email_token = bin2hex(random_bytes(16));
                 $ticket->save();
+
+                $this->uploadService->copyFiles(
+                    'outer-tickets/' . $clientOuterTicket->id,
+                    'tickets/' . $ticket->id
+                );
+
                 $ticketClient = TicketClientContact::where('ticket_client_id', $ticket->ticket_client_id)->first();
                 
                 if($ticketClient?->email){

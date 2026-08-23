@@ -39,6 +39,8 @@ class UpdateClientOuterTicketRequest extends FormRequest
             'email' => 'nullable',
             'phone' => 'nullable',
             'address' => 'nullable',
+            'city' => 'nullable',
+            'state' => 'nullable',
             "status" => "required",
             "clientId" => "required",
             'contractId' => 'nullable',

@@ -51,6 +51,8 @@ class ClientOuterTicketService{
             'message' => $clientOuterTicketData['message']??'', //messaggio (free text).
             "email" => $clientOuterTicketData['email']??'',
             'address' => $clientOuterTicketData['address']??'',
+            'city' => $clientOuterTicketData['city']??null,
+            'state' => $clientOuterTicketData['state']??null,
             "phone" => $clientOuterTicketData['phone']??'',
             'status' => $clientOuterTicketData['status']??0,
             'anno' => $clientOuterTicketData['anno']??'',
@@ -93,6 +95,8 @@ class ClientOuterTicketService{
         $clientOuterTicket->message = $message;
         $clientOuterTicket->email = $clientOuterTicketData['email'] ?? '';
         $clientOuterTicket->address = $clientOuterTicketData['address'] ?? '';
+        $clientOuterTicket->city = $clientOuterTicketData['city'] ?? null;
+        $clientOuterTicket->state = $clientOuterTicketData['state'] ?? null;
         $clientOuterTicket->phone = $clientOuterTicketData['phone'] ?? '';
         $clientOuterTicket->status = $newStatus;
         $clientOuterTicket->anno = $clientOuterTicketData['anno'] ?? '';

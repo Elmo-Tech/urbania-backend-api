@@ -17,6 +17,8 @@ class ClientOuterTicket extends Model
         'p_iva',
         'ragione_sociale',
         'address',
+        'city',
+        'state',
         'email',
         'phone',
         'delegated_firstname',

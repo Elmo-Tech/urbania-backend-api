@@ -30,6 +30,8 @@ class CreateAiClientOuterTicketRequest extends FormRequest
             'pIva' => 'nullable|string|max:20',
             'ragioneSociale' => 'nullable|string|max:255',
             'address' => 'nullable|string|max:255',
+            'city' => 'nullable|string|max:255',
+            'state' => 'nullable|string|max:255',
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:20',
             'delegatedFirstname' => 'nullable|string|max:255',

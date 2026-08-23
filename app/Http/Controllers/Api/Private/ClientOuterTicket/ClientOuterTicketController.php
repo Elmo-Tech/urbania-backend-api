@@ -32,6 +32,14 @@ class ClientOuterTicketController extends Controller
             DB::beginTransaction();
 
             $clientOuterTicket = $this->clientOuterTicketService->createClientOuterTicket($createClientOuterTicketRequest->validated());
+            $files = $createClientOuterTicketRequest->file('files', []);
+
+            foreach ($files as $file) {
+                $this->uploadService->uploadFile([
+                    'file' => $file,
+                    'uploadPath' => 'outer-tickets/' . $clientOuterTicket->id
+                ]);
+            }
 
             //Mail::to($clientOuterTicket->email)->send(new TicketCreated());
 
@@ -40,6 +48,7 @@ class ClientOuterTicketController extends Controller
 
             return response()->json([
                 'message' => 'ticket has been created !',
+                'clientOuterTicketId' => $clientOuterTicket->id,
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -63,13 +72,22 @@ class ClientOuterTicketController extends Controller
                 ], 200);
             }
 
-            $ticket->description = $ticket->description == ""? $request->message: $ticket->description." by client: ".$request->message;
+            $message = trim((string) $request->message);
+
+            if ($message !== '') {
+                $descriptionEntry = now()->format('d/m/Y H:i') . PHP_EOL . $message;
+                $existingDescription = trim((string) $ticket->description);
+
+                $ticket->description = $existingDescription === ''
+                    ? $descriptionEntry
+                    : $existingDescription . PHP_EOL . $descriptionEntry;
+            }
 
             $ticket->status = 1;
 
             $ticket->save();
 
-            foreach($request->files as $file){
+            foreach(($request->files ?? []) as $file){
                 $this->uploadService->uploadFile([
                     'file' => $file[0]['path'],
                     'uploadPath' => $request->uploadPath

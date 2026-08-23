@@ -30,7 +30,7 @@ class ClientOuterTicketResource extends JsonResource
             'phone' => $this->phone,
             'address' => $this->address,
             'city' => $this->city,
-            'state' => $this->state,
+            'stats' => $this->state,
             'message' => $this->message,
             'description' => $this->message,
             'anno' => $this->anno,

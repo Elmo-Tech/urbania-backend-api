@@ -38,6 +38,7 @@ class ClientOuterTicketService{
         //$newResevationSchedule = ResevationSchedule::find($parameterData['parameterId']);
         $cf = $clientOuterTicketData['cf']??$clientOuterTicketData['pIva']??null;
         $ticketClient = $this->findTicketClientByIdentity($cf);
+        $state = $clientOuterTicketData['stats'] ?? $clientOuterTicketData['state'] ?? null;
 
         $clientOuterTicket = ClientOuterTicket::create([
             "firstname" => $clientOuterTicketData['firstname']??'',
@@ -52,7 +53,7 @@ class ClientOuterTicketService{
             "email" => $clientOuterTicketData['email']??'',
             'address' => $clientOuterTicketData['address']??'',
             'city' => $clientOuterTicketData['city']??null,
-            'state' => $clientOuterTicketData['state']??null,
+            'state' => $state,
             "phone" => $clientOuterTicketData['phone']??'',
             'status' => $clientOuterTicketData['status']??0,
             'anno' => $clientOuterTicketData['anno']??'',
@@ -83,6 +84,7 @@ class ClientOuterTicketService{
         $newStatus = (string) ($clientOuterTicketData['status'] ?? 0);
         $message = $clientOuterTicketData['message'] ?? $clientOuterTicketData['description'] ?? '';
         $istanzaParameterId = $clientOuterTicketData['istanzaParameterId'] ?? $clientOuterTicketData['tipologiaIstanza'] ?? null;
+        $state = $clientOuterTicketData['stats'] ?? $clientOuterTicketData['state'] ?? null;
 
         $clientOuterTicket->firstname = $clientOuterTicketData['firstname'] ?? '';
         $clientOuterTicket->lastname = $clientOuterTicketData['lastname'] ?? '';
@@ -96,7 +98,7 @@ class ClientOuterTicketService{
         $clientOuterTicket->email = $clientOuterTicketData['email'] ?? '';
         $clientOuterTicket->address = $clientOuterTicketData['address'] ?? '';
         $clientOuterTicket->city = $clientOuterTicketData['city'] ?? null;
-        $clientOuterTicket->state = $clientOuterTicketData['state'] ?? null;
+        $clientOuterTicket->state = $state;
         $clientOuterTicket->phone = $clientOuterTicketData['phone'] ?? '';
         $clientOuterTicket->status = $newStatus;
         $clientOuterTicket->anno = $clientOuterTicketData['anno'] ?? '';
@@ -177,7 +179,7 @@ class ClientOuterTicketService{
                 ]);
                 $ticketClientAddress->address = $clientOuterTicketData['address'];
                 $ticketClientAddress->city = $clientOuterTicketData['city'] ?? null;
-                $ticketClientAddress->state = $clientOuterTicketData['state'] ?? null;
+                $ticketClientAddress->state = $state;
                 $ticketClientAddress->postal_code = $clientOuterTicketData['postalCode'] ?? null;
                 $ticketClientAddress->save();
             }
@@ -207,7 +209,7 @@ class ClientOuterTicketService{
                 ]);
                 $ticketClientAddress->address = $clientOuterTicketData['address'];
                 $ticketClientAddress->city = $clientOuterTicketData['city'] ?? null;
-                $ticketClientAddress->state = $clientOuterTicketData['state'] ?? null;
+                $ticketClientAddress->state = $state;
                 $ticketClientAddress->postal_code = $clientOuterTicketData['postalCode'] ?? null;
                 $ticketClientAddress->save();
             }

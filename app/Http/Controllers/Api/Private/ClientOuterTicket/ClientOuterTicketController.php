@@ -87,14 +87,6 @@ class ClientOuterTicketController extends Controller
 
             $ticket->save();
 
-            foreach(($request->files ?? []) as $file){
-                $this->uploadService->uploadFile([
-                    'file' => $file[0]['path'],
-                    'uploadPath' => $request->uploadPath
-                ]);
-            }
-
-
             DB::commit();
 
             return response()->json([

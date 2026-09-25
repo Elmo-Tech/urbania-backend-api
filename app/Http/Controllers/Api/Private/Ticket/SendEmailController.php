@@ -35,14 +35,15 @@ class SendEmailController extends Controller
             'email' => 'required|email',
             'subject' => 'required|string|max:255',
             'content' => 'required|string',
+            'attachments' => 'sometimes|array',
             'attachments.*' => 'file|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
+        $storedAttachmentsToDelete = [];
         DB::beginTransaction();
         try {
             $attachments = $request->file('attachments') ?? [];
             $storedAttachments = [];
-            $storedAttachmentsToDelete = [];
 
             // Store files in the 'uploads' disk and prepare the paths for email attachments
             foreach ($attachments as $file) {
@@ -68,13 +69,12 @@ class SendEmailController extends Controller
 
             DB::commit();
 
-            // Delete the files after sending the email
-            Storage::disk('uploads')->delete($storedAttachmentsToDelete);
-
             return response()->json(['message' => 'Email Sent!'], 200);
         } catch (\Exception $e) {
             DB::rollBack();
             return response()->json(['error' => 'Failed to send email', 'message' => $e->getMessage()], 500);
+        } finally {
+            Storage::disk('uploads')->delete($storedAttachmentsToDelete);
         }
     }
 }

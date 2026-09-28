@@ -79,21 +79,23 @@ class ClientOuterTicketController extends Controller
                         : $existingDescription . PHP_EOL . $descriptionEntry;
                 }
 
-                if (!empty($data['sollecito'])) {
+                if (array_key_exists('sollecito', $data)) {
+                    $urgencyName = $data['sollecito'] ? 'Sollecitato' : 'Non urgente';
+                    $preferredId = $data['sollecito'] ? 92 : 91;
                     $options = DB::table('parameter_values')->where('parameter_id', 17)
-                        ->whereNull('deleted_at')->whereRaw('LOWER(TRIM(parameter_value)) = ?', ['sollecitato']);
-                    $urgency = (clone $options)->where('id', 92)->first();
+                        ->whereNull('deleted_at')->whereRaw('LOWER(TRIM(parameter_value)) = ?', [strtolower($urgencyName)]);
+                    $urgency = (clone $options)->where('id', $preferredId)->first();
                     if (!$urgency) {
                         $matches = $options->limit(2)->get();
-                        abort_unless($matches->count() === 1, 422, 'Sollecitato urgency is missing or ambiguous.');
+                        abort_unless($matches->count() === 1, 422, $urgencyName . ' urgency is missing or ambiguous.');
                         $urgency = $matches->first();
                     }
                     abort_if($urgency->description === null || trim((string) $urgency->description) === '',
-                        422, 'Sollecitato urgency has no configured value.');
+                        422, $urgencyName . ' urgency has no configured value.');
                     $conflictingValue = DB::table('parameter_values')->where('parameter_id', 17)
                         ->whereNull('deleted_at')->where('description', $urgency->description)
                         ->where('id', '!=', $urgency->id)->exists();
-                    abort_if($conflictingValue, 422, 'Sollecitato urgency has an ambiguous configured value.');
+                    abort_if($conflictingValue, 422, $urgencyName . ' urgency has an ambiguous configured value.');
 
                     // Tickets store the option's description; the edit API maps it back to its ID.
                     $ticket->urgenza = $urgency->description;

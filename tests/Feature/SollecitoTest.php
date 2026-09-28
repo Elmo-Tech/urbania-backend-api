@@ -151,12 +151,50 @@ class SollecitoTest extends TestCase
         $this->assertSame('28/09/2026 12:30'.PHP_EOL.'test message', Ticket::find(3235)->description);
     }
 
-    public function test_non_sollecito_update_preserves_existing_status_and_urgency(): void
+    public function test_zero_restores_non_urgent_without_changing_status(): void
     {
         DB::table('tickets')->where('id', 3235)->update(['status' => 3, 'urgenza' => '7']);
         $this->send(['sollecito' => '0'])->assertOk();
         $this->assertEquals(3, Ticket::find(3235)->status);
-        $this->assertSame('7', Ticket::find(3235)->urgenza);
+        $this->assertSame('0', Ticket::find(3235)->urgenza);
+    }
+
+    public function test_repeated_zero_and_one_requests_can_toggle_urgency_both_ways(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $values = [1, 1, 0, 0, '1', '0', true, false, 1];
+        foreach ($values as $index => $value) {
+            $this->send(['sollecito' => $value, 'message' => 'Follow-up '.$index])->assertOk();
+            $ticket = Ticket::find(3235);
+            $this->assertEquals(3, $ticket->status);
+            $this->assertSame($value ? '7' : '0', $ticket->urgenza);
+            $this->assertStringContainsString('Follow-up '.$index, $ticket->description);
+            $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()
+                ->assertJsonPath('status', 3)->assertJsonPath('urgenza', $value ? 92 : 91);
+        }
+        $this->assertSame(count($values), substr_count(Ticket::find(3235)->description, 'Follow-up'));
+        Mail::assertNothingSent();
+    }
+
+    public function test_zero_falls_back_to_non_urgent_name_when_91_does_not_match(): void
+    {
+        DB::table('parameter_values')->where('id', 91)->update(['parameter_value' => 'Urgente']);
+        DB::table('parameter_values')->insert([
+            'id' => 191, 'parameter_id' => 17, 'parameter_value' => ' Non urgente ', 'description' => '8',
+        ]);
+        $this->send(['sollecito' => 0])->assertOk();
+        $this->assertSame('8', Ticket::find(3235)->urgenza);
+        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()->assertJsonPath('urgenza', 191);
+    }
+
+    public function test_missing_non_urgent_option_rejects_zero_without_partial_changes(): void
+    {
+        DB::table('parameter_values')->where('id', 91)->delete();
+        $this->send(['sollecito' => 0, 'files' => [$this->attachment()]])->assertUnprocessable();
+        $this->assertUnchanged();
     }
 
     public function test_sollecito_never_changes_an_existing_suspended_status(): void
@@ -169,12 +207,12 @@ class SollecitoTest extends TestCase
 
     public function test_missing_sollecito_flag_preserves_both_fields(): void
     {
-        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3, 'urgenza' => '7']);
         $this->putJson('/api/v1/client-outer-tickets/update', [
             'ticketId' => 3235, 'token' => 'customer-test-token', 'message' => 'Follow-up',
         ])->assertOk();
         $this->assertEquals(3, Ticket::find(3235)->status);
-        $this->assertSame('0', Ticket::find(3235)->urgenza);
+        $this->assertSame('7', Ticket::find(3235)->urgenza);
     }
 
     public static function fallbackOptions(): array

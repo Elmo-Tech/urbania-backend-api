@@ -9,7 +9,8 @@ needed for this fix.
 - `ticketId`: the internal ticket ID, not the original external request ID.
 - `token`: the matching ticket's email token; required and nonempty.
 - `sollecito`: optional boolean (0/1, including multipart strings). When 1,
-  `Urgenza` becomes **Sollecitato**. When 0 or omitted, urgency is unchanged.
+  `Urgenza` becomes **Sollecitato**. When 0, it becomes **Non urgente**.
+  When omitted, urgency is unchanged. Repeated requests can switch in either direction.
   The ticket's `status` is always preserved; this endpoint does not suspend it.
 - `message`: optional text appended to `tickets.description`, preceded by
   `d/m/Y H:i`. Existing description content is preserved. Blank text is ignored.
@@ -33,12 +34,13 @@ Executable/web-content uploads are rejected. No malware scanning is added.
 `Segnalazione` is unchanged. No email is sent.
 
 Urgency options belong to `parameter_values.parameter_id = 17`. ID 91 is the
-reported Non urgente option and ID 92 is the reported Sollecitato option. For a
-Sollecito request, ID 92 is used only if it is active and its `parameter_value`
-matches `Sollecitato` (case-insensitive, ignoring surrounding spaces). Otherwise,
-the backend searches active urgency options by that name and requires one match.
+reported Non urgente option and ID 92 is the reported Sollecitato option.
+Explicit `sollecito=0` selects 91 / Non urgente; `sollecito=1` selects 92 / Sollecitato.
+The preferred ID is used only if active and its `parameter_value` matches the
+expected name (case-insensitive, ignoring surrounding spaces). Otherwise, the
+backend searches active urgency options by that name and requires one match.
 Missing/ambiguous options or unusable description values return 422 without changes.
-No request silently resets urgency to Non urgente.
+Omitting `sollecito` never resets urgency to Non urgente.
 
 As in the existing ticket service, `tickets.urgenza` stores the selected option's
 **description**, not its ID. The ticket-detail API converts this value back to the

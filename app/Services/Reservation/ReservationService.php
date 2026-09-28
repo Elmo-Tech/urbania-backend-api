@@ -63,7 +63,8 @@ class ReservationService{
             ], 401));
         }
         
-        $confirmationToken = $reservationData['status'] == 2? bin2hex(random_bytes(16)):null;
+        $confirmationToken = $reservationData['status'] == 2
+            ? ($reservation->confirmation_token ?: bin2hex(random_bytes(16))) : null;
 
         $reservation->fill([
             "firstname" => $reservationData['firstname']??'',

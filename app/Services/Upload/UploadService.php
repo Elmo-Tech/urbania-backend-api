@@ -3,6 +3,8 @@
 namespace App\Services\Upload;
 
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 class UploadService
 {
@@ -24,9 +26,13 @@ class UploadService
         }*/
 
         $fileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
-        $fileOnServerName = time() . '___' . $fileName;
-        $fileExtension = $file->guessExtension();
+        $prefix = !empty($fileData['uniqueName']) ? Str::uuid()->toString() : time();
+        $fileOnServerName = $prefix . '___' . $fileName;
+        $fileExtension = $this->resolveFileExtension($file);
         $filePath = Storage::disk($this->storageDisks[$storageDisk])->putFileAs($uploadPath, $file, $fileOnServerName . '.' . $fileExtension);
+        if ($filePath === false) {
+            throw new \RuntimeException('Unable to store uploaded attachment.');
+        }
 
         //$filePath = Storage::disk($this->storageDisks[$storageDisk])->put($uploadPath . "/" .$fileOnServerName . '.' . $fileExtension, $file, 'public');
 
@@ -45,7 +51,7 @@ class UploadService
             $fileName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
 
             $fileOnServerName = time() . '___' . $fileName;
-            $fileExtension = $file->guessExtension();
+            $fileExtension = $this->resolveFileExtension($file);
             $filePath = Storage::disk('public')->putFileAs($uploadPath, $file, $fileOnServerName . '.' . $fileExtension);
             $uploadedPaths[] = $filePath;
         }
@@ -53,6 +59,18 @@ class UploadService
         return $uploadedPaths;
     }
 
+
+    private function resolveFileExtension(UploadedFile $file): ?string
+    {
+        $extension = $file->getClientOriginalExtension();
+
+        // Preserve these formats even when MIME detection reports generic binary data.
+        if (in_array(strtolower($extension), ['p7m', 'eml', 'msg'], true)) {
+            return $extension;
+        }
+
+        return $file->guessExtension();
+    }
 
     public function readFiles(string $path)
     {

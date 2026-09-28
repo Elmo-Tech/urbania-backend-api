@@ -24,10 +24,10 @@ class UpdateClientOuterTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'clientOuterTicketId' => 'required',
-            'firstname' => 'required',
-            'lastname' => 'required',
-            'cf' => 'required',
+            'clientOuterTicketId' => 'required|integer',
+            'firstname' => 'required_unless:acceptStatus,2',
+            'lastname' => 'required_unless:acceptStatus,2',
+            'cf' => 'required_unless:acceptStatus,2',
             'pIva' => 'nullable',
             'ragioneSociale' => 'nullable',
             'delegatedFirstname' => 'nullable',
@@ -42,8 +42,8 @@ class UpdateClientOuterTicketRequest extends FormRequest
             'city' => 'nullable',
             'state' => 'nullable',
             'stats' => 'nullable',
-            "status" => "required",
-            "clientId" => "required",
+            "status" => "required_unless:acceptStatus,2",
+            "clientId" => "required_unless:acceptStatus,2",
             'contractId' => 'nullable',
             'serviceId' => 'nullable',
             'esito' => 'nullable',
@@ -58,7 +58,8 @@ class UpdateClientOuterTicketRequest extends FormRequest
             'tipologiaIstanza' => 'nullable',
             'delegatedRoleId' => 'nullable',
             'ticketClientId' => 'nullable',
-            'acceptStatus' => 'nullable',
+            'acceptStatus' => 'nullable|integer|in:0,1,2',
+            'rejectionReason' => 'exclude_unless:acceptStatus,2|required|string|max:5000',
             'workerId' => 'nullable'
         ];
     }

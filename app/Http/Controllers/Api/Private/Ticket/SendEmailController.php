@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ClientTicketEmail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 
 
@@ -36,7 +38,19 @@ class SendEmailController extends Controller
             'subject' => 'required|string|max:255',
             'content' => 'required|string',
             'attachments' => 'sometimes|array',
-            'attachments.*' => 'file|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'attachments.*' => Rule::forEach(function ($file) {
+                // These formats may be detected as generic binary or OLE files.
+                $mimeTypes = [
+                    'p7m' => ['application/pkcs7-mime', 'application/x-pkcs7-mime', 'application/pkcs7-signature', 'application/octet-stream'],
+                    'eml' => ['message/rfc822', 'text/plain', 'application/octet-stream'],
+                    'msg' => ['application/vnd.ms-outlook', 'application/CDFV2', 'application/x-ole-storage', 'application/x-cdf', 'application/octet-stream'],
+                ];
+                $extension = $file instanceof UploadedFile ? strtolower($file->getClientOriginalExtension()) : '';
+
+                return isset($mimeTypes[$extension])
+                    ? ['file', 'mimetypes:'.implode(',', $mimeTypes[$extension])]
+                    : ['file', 'mimes:jpg,jpeg,png,pdf,doc,docx'];
+            }),
         ]);
 
         $storedAttachmentsToDelete = [];

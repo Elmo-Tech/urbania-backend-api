@@ -28,9 +28,17 @@ class ClientOuterTicketService{
 
     public function allClientOuterTickets(array $request){
 
-        $clientOuterTickets = ClientOuterTicket::with('client')->get();
+        $query = ClientOuterTicket::with('client');
 
-        return $clientOuterTickets;
+        if ((int) ($request['isProcessed'] ?? 0) === 1) {
+            $query->whereIn('accept_status', [1, 2]);
+        } else {
+            $query->where(function ($query) {
+                $query->where('accept_status', 0)->orWhereNull('accept_status');
+            });
+        }
+
+        return $query->get();
     }
 
     public function createClientOuterTicket(array $clientOuterTicketData){
@@ -79,7 +87,19 @@ class ClientOuterTicketService{
 
     public function updateClientOuterTicket(array $clientOuterTicketData): mixed{
 
-        $clientOuterTicket = ClientOuterTicket::findOrFail($clientOuterTicketData['clientOuterTicketId']);
+        $clientOuterTicket = ClientOuterTicket::lockForUpdate()->findOrFail($clientOuterTicketData['clientOuterTicketId']);
+
+        if ((int) ($clientOuterTicketData['acceptStatus'] ?? -1) === 2) {
+            $email = $clientOuterTicketData['email'] ?? $clientOuterTicket->email;
+            validator(['email' => $email], ['email' => 'required|email'])->validate();
+
+            $clientOuterTicket->email = $email;
+            $clientOuterTicket->accept_status = 2;
+            $clientOuterTicket->rejection_reason = trim($clientOuterTicketData['rejectionReason']);
+            $clientOuterTicket->save();
+
+            return $clientOuterTicket;
+        }
         $currentStatus = (string) $clientOuterTicket->status;
         $newStatus = (string) ($clientOuterTicketData['status'] ?? 0);
         $message = $clientOuterTicketData['message'] ?? $clientOuterTicketData['description'] ?? '';
@@ -226,8 +246,8 @@ class ClientOuterTicketService{
         $clientOuterTicket->note = $clientOuterTicketData['note'] ?? null;
         $clientOuterTicket->segnalazione = $clientOuterTicketData['segnalazione'] ?? null;
         $clientOuterTicket->urgenza = $parameterValue->description ?? $clientOuterTicket->urgenza ?? "0";
-        $clientOuterTicket->accept_status = $clientOuterTicketData['acceptStatus'] ?? 0;
-        $clientOuterTicket->worker_id = $clientOuterTicketData['workerId'] === "" ? null : ($clientOuterTicketData['workerId'] ?? null);
+        $clientOuterTicket->accept_status = $clientOuterTicketData['acceptStatus'] ?? $clientOuterTicket->accept_status;
+        $clientOuterTicket->worker_id = ($clientOuterTicketData['workerId'] ?? '') === "" ? null : $clientOuterTicketData['workerId'];
 
         $clientOuterTicket->save();
 

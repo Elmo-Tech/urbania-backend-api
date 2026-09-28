@@ -10,6 +10,14 @@ class ClientOuterTicket extends Model
 {
     use HasFactory, CreatedUpdatedBy;
 
+    protected $attributes = [
+        'accept_status' => 0,
+    ];
+
+    protected $casts = [
+        'accept_status' => 'integer',
+    ];
+
     protected $fillable = [
         'firstname',
         'lastname',
@@ -33,6 +41,7 @@ class ClientOuterTicket extends Model
         'client_id',
         'delegated_role_id',
         'ticket_client_id',
+        'rejection_reason',
     ];
 
     public static function boot()

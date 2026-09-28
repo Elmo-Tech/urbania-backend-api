@@ -10,7 +10,7 @@ use App\Http\Resources\Reservation\ReservationResource;
 use App\Mail\ConfirmReservation;
 use App\Mail\RefuseReservation;
 use App\Models\Reservation\Reservation;
-use App\Services\Event\EventService;
+use App\Services\Reservation\ReservationCalendarService;
 use App\Services\Reservation\ReservationService;
 use App\Utils\PaginateCollection;
 use Illuminate\Http\Request;
@@ -20,13 +20,13 @@ use Illuminate\Support\Facades\Mail;
 class ReservationController extends Controller
 {
     protected $reservationService;
-    protected $eventService;
+    protected $calendarService;
 
-    public function __construct(ReservationService $reservationService, EventService $eventService)
+    public function __construct(ReservationService $reservationService, ReservationCalendarService $calendarService)
     {
         //$this->middleware('auth:api');
         $this->reservationService = $reservationService;
-        $this->eventService = $eventService;
+        $this->calendarService = $calendarService;
     }
 
     public function index(Request $request){
@@ -74,24 +74,18 @@ class ReservationController extends Controller
     {
         try {
             DB::beginTransaction();
+            $existing = Reservation::lockForUpdate()->findOrFail($updateReservationRequest->reservationId);
+            $event = in_array((int) $updateReservationRequest->status, [0, 2], true)
+                ? $this->calendarService->findEvent($existing) : null;
             $reservation = $this->reservationService->updateReservation($updateReservationRequest->validated());
 
             if($reservation->status == 2){
-                $this->eventService->createEvent([
-                    'title' => $reservation->firstname? $reservation->firstname . ' ' . $reservation->lastname :  $reservation->ragione_sociale,
-                    'description' => $reservation->message,
-                    'startDate' => $reservation->date,
-                    'endDate' => $reservation->date,
-                    'url' => "",
-                    "allDay" => 0,
-                    "clientId" => $reservation->client_id,
-                    "groupId" => null,
-                    "ticketClientId" => $reservation->ticket_client_id
-                ]);
+                $this->calendarService->syncConfirmation($reservation, $event);
                 Mail::to($reservation->email)->send(new ConfirmReservation($reservation));
             }
             
             if($reservation->status == 0){
+                $this->calendarService->deleteEvent($event);
                 Mail::to($reservation->email)->send(new RefuseReservation($reservation));
             }
 

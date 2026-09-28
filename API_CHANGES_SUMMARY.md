@@ -1,0 +1,48 @@
+# ملخص تغييرات الـAPI
+
+## التذاكر الخارجية
+
+| الراوت | الـkey | التغيير |
+| --- | --- | --- |
+| `PUT /api/v1/outer-tickets/update` | `acceptStatus` | موجود أصلًا، أُضيفت قيمة الرفض `2` |
+| `PUT /api/v1/outer-tickets/update` | `rejectionReason` | جديد، مطلوب عند `acceptStatus = 2` |
+| `GET /api/v1/outer-tickets` | `isProcessed` | فلتر جديد: `1` المقبول والمرفوض، `0` أو عدم إرساله المعلق فقط |
+| `GET /api/v1/outer-tickets` | `acceptStatus`, `rejectionReason` | حقول مضافة لرد القائمة |
+| `GET /api/v1/outer-tickets/edit?clientOuterTicketId={id}` | `rejectionReason` | حقل جديد في رد التفاصيل، و`acceptStatus` موجود أصلًا |
+
+### قيم `acceptStatus`
+
+| القيمة | قبل | بعد |
+| --- | --- | --- |
+| `0` أو `null` | غير مقبول بعد | معلق |
+| `1` | قبول وتحويل لتيكت داخلي | كما هي |
+| `2` | لا يوجد مسار رفض مخصص | رفض مع حفظ السبب وإيميل للعميل |
+
+`acceptStatus` منفصل عن `status` الخاص بالتيكت.
+
+## المواعيد
+
+الراوتس: `PUT /api/v1/client-reservations/control` و`PUT /api/v1/reservations/update`.
+
+**لا keys جديدة، وأرقام الحالات لم تتغير.**
+
+| `status` | قبل | بعد |
+| --- | --- | --- |
+| `0` | رفض مع بقاء الحدث في التقويم | رفض وحذف الحدث المرتبط من التقويم |
+| `2` | قبول؛ تحديث الأدمن كان ينشئ حدثًا جديدًا كل مرة | قبول مع الحفاظ على نفس الحدث دون تكرار |
+
+## Sollecito
+
+الراوت: `PUT /api/v1/client-outer-tickets/update`.
+
+**لا keys جديدة؛ `sollecito` موجود أصلًا.**
+
+| الحقل | قبل | بعد |
+| --- | --- | --- |
+| `status` | المسار يغيّره إلى `1` | يظل كما هو؛ لا يتحول إلى `3` |
+| `urgenza` عند `sollecito = 1` | لا يتغير | يصبح `Sollecitato`، عادة ID `92` بدل `Non urgente` ID `91` |
+| `urgenza` عند `sollecito = 0` أو عدم إرساله | لا يتغير | يظل كما هو |
+
+يُتحقق من اسم الخيار `92`، وإن لم يتطابق يُبحث عن `Sollecitato` في `parameter_values.parameter_value`.
+
+البريد والمرفقات: لا keys جديدة للفرونت ولا تغيير في الحالات.

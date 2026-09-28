@@ -41,6 +41,7 @@ class ClientOuterTicketResource extends JsonResource
             'delegatedRoleId' => $this->delegated_role_id,
             'clientId' => $this->client_id,
             'acceptStatus' => $this->accept_status,
+            'rejectionReason' => $this->rejection_reason,
             'urgenza' => $this->urgenza,
             'notifyDate' => $this->notify_date,
             'contractId' => $this->contract_id."##".$this->contract_two_id,

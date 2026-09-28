@@ -3,13 +3,18 @@
 namespace Tests\Feature;
 
 use App\Mail\ClientTicketEmail;
+use App\Mail\OuterTicketRejected;
+use App\Models\ClientOuterTicket;
+use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Tests\TestCase;
@@ -49,6 +54,23 @@ class MicrosoftGraphMailTest extends TestCase
     private function sendText(): void
     {
         Mail::raw('Test body', fn (Message $message) => $message->to('recipient@example.com')->subject('Test subject'));
+    }
+
+    public function test_rejection_email_sends_saved_reason_via_graph_with_html_escaped(): void
+    {
+        $this->fakeSuccess();
+        $ticket = (new ClientOuterTicket)->forceFill([
+            'number' => 'T-000042',
+            'rejection_reason' => "Missing document\n<script>alert(1)</script>",
+        ]);
+        Mail::to('recipient@example.com')->send(new OuterTicketRejected($ticket));
+
+        Http::assertSent(fn (Request $request) => $request->url() === self::SEND_URL
+            && $request['message']['subject'] === 'Ticket Rejected'
+            && str_contains($request['message']['body']['content'], 'T-000042')
+            && str_contains($request['message']['body']['content'], 'Missing document')
+            && str_contains($request['message']['body']['content'], '&lt;script&gt;')
+            && ! str_contains($request['message']['body']['content'], '<script>'));
     }
 
     public function test_sends_existing_mailable_with_html_binary_attachment_and_sender(): void
@@ -246,6 +268,78 @@ class MicrosoftGraphMailTest extends TestCase
             && $request['message']['body']['content'] === '<p>Original HTML</p>'
             && $request['message']['attachments'][0]['name'] === 'report.pdf'
             && base64_decode($request['message']['attachments'][0]['contentBytes']) === 'file-bytes');
+    }
+
+    public static function clientAttachments(): array
+    {
+        return [
+            ['signed.pdf.p7m', 'application/pkcs7-mime'],
+            ['signed.p7m', 'application/x-pkcs7-mime'],
+            ['signed.p7m', 'application/pkcs7-signature'],
+            ['signed.P7M', 'application/octet-stream'],
+            ['message.eml', 'message/rfc822'],
+            ['message.eml', 'text/plain'],
+            ['message.EML', 'application/octet-stream'],
+            ['message.msg', 'application/vnd.ms-outlook'],
+            ['message.msg', 'application/CDFV2'],
+            ['message.msg', 'application/x-ole-storage'],
+            ['message.msg', 'application/x-cdf'],
+            ['message.MSG', 'application/octet-stream'],
+            ['existing.pdf', 'application/pdf'],
+        ];
+    }
+
+    #[DataProvider('clientAttachments')]
+    public function test_client_email_route_sends_supported_attachments_unchanged(string $name, string $mime): void
+    {
+        $this->fakeSuccess();
+        $this->actingAs((new User)->forceFill(['id' => 1]), 'api');
+        Storage::fake('uploads');
+        DB::shouldReceive('beginTransaction')->once();
+        DB::shouldReceive('commit')->once();
+        DB::shouldReceive('rollBack')->never();
+        $bytes = "Attachment payload\x00\xff\n";
+        $file = UploadedFile::fake()->createWithContent($name, $bytes)->mimeType($mime);
+
+        $this->post('/api/v1/client-email/send', [
+            'email' => 'recipient@example.com',
+            'subject' => 'Client attachment',
+            'content' => 'Attached document',
+            'attachments' => [$file],
+        ], ['Accept' => 'application/json'])->assertOk()->assertJson(['message' => 'Email Sent!']);
+
+        Http::assertSent(fn (Request $request) => $request->url() === self::SEND_URL
+            && $request['message']['attachments'][0]['name'] === $name
+            && base64_decode($request['message']['attachments'][0]['contentBytes']) === $bytes);
+        $this->assertSame([], Storage::disk('uploads')->allFiles());
+    }
+
+    public static function rejectedClientAttachments(): array
+    {
+        return [
+            ['unknown.bin', 'application/octet-stream'],
+            ['archive.zip', 'application/zip'],
+            ['script.php', 'application/pdf'],
+            ['script.p7m', 'application/x-php'],
+            ['script.eml', 'text/html'],
+            ['program.msg', 'application/x-dosexec'],
+        ];
+    }
+
+    #[DataProvider('rejectedClientAttachments')]
+    public function test_client_email_route_keeps_rejecting_unsupported_attachments(string $name, string $mime): void
+    {
+        Http::fake();
+        $this->actingAs((new User)->forceFill(['id' => 1]), 'api');
+        DB::shouldReceive('beginTransaction')->never();
+        $this->post('/api/v1/client-email/send', [
+            'email' => 'recipient@example.com',
+            'subject' => 'Unsupported attachment',
+            'content' => 'Test',
+            'attachments' => [UploadedFile::fake()->create($name, 1, $mime)],
+        ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('attachments.0');
+
+        Http::assertNothingSent();
     }
 
     public function test_general_route_reports_graph_failure_as_json(): void

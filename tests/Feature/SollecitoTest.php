@@ -1,0 +1,331 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Ticket;
+use App\Models\User;
+use App\Services\Upload\UploadService;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\TestCase;
+
+class SollecitoTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config([
+            'database.default' => 'sollecito_test',
+            'database.connections.sollecito_test' => [
+                'driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false,
+            ],
+            'jwt.secret' => str_repeat('test-key', 8),
+        ]);
+        Mail::fake();
+        Storage::fake('uploads');
+        $this->travelTo(now()->setDate(2026, 9, 28)->setTime(12, 30));
+
+        Schema::create('tickets', function (Blueprint $table) {
+            $table->id();
+            $table->integer('status');
+            foreach (['description', 'email_token', 'ticket_number', 'segnalazione', 'urgenza',
+                'notify_date', 'end_date', 'worker_id', 'connect_type_id', 'client_id', 'ticket_client_id',
+                'contract_id', 'contract_id_2', 'service_id', 'esito', 'note', 'status_date', 'anno',
+                'tipologia_istanza'] as $column) {
+                $table->text($column)->nullable();
+            }
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->unsignedBigInteger('updated_by')->nullable();
+            $table->timestamps();
+            $table->softDeletes();
+        });
+        Schema::create('parameter_values', function (Blueprint $table) {
+            $table->id();
+            $table->integer('parameter_id');
+            $table->string('parameter_value');
+            $table->text('description')->nullable();
+            $table->softDeletes();
+        });
+        DB::table('parameter_values')->insert([
+            ['id' => 91, 'parameter_id' => 17, 'parameter_value' => 'Non urgente', 'description' => '0'],
+            ['id' => 92, 'parameter_id' => 17, 'parameter_value' => 'Sollecitato', 'description' => '7'],
+        ]);
+        DB::table('tickets')->insert([
+            'id' => 3235, 'status' => 1, 'description' => 'Original description',
+            'email_token' => 'customer-test-token', 'ticket_number' => '3235_2026',
+            'segnalazione' => '5', 'urgenza' => '0', 'updated_by' => 17,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    private function attachment(string $name = 'document.pdf', string $mime = 'application/pdf'): array
+    {
+        return [
+            'name' => $name,
+            'path' => UploadedFile::fake()->createWithContent($name, 'Attachment '.$name)->mimeType($mime),
+            'actionStatus' => 'create',
+        ];
+    }
+
+    private function send(array $overrides = [])
+    {
+        // Match the browser's multipart POST with method spoofing and nested files.
+        return $this->post('/api/v1/client-outer-tickets/update', array_replace([
+            '_method' => 'PUT', 'ticketId' => '3235', 'token' => 'customer-test-token',
+            'sollecito' => '1', 'message' => 'test message', 'uploadPath' => 'tickets/3235',
+        ], $overrides), ['Accept' => 'application/json']);
+    }
+
+    public function test_public_sollecito_changes_urgency_preserves_status_and_saves_message_and_excel(): void
+    {
+        $file = $this->attachment('ElmoTech_A.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        $this->send(['files' => [$file]])->assertOk();
+
+        $ticket = Ticket::findOrFail(3235);
+        $description = 'Original description'.PHP_EOL.'28/09/2026 12:30'.PHP_EOL.'test message';
+        $this->assertEquals(1, $ticket->status);
+        $this->assertSame($description, $ticket->description);
+        $this->assertSame('5', $ticket->segnalazione);
+        $this->assertSame('7', $ticket->urgenza);
+        $this->assertNull($ticket->updated_by);
+
+        $files = $this->getJson('/api/v1/uploads/getfiles?directory=tickets-3235')->assertOk()->json();
+        $this->assertCount(1, $files);
+        $path = $files[0]['path'];
+        $this->assertStringStartsWith('uploads/tickets/3235/', $path);
+        $this->assertStringEndsWith('___ElmoTech_A.xlsx', $path);
+        $this->assertSame('Attachment ElmoTech_A.xlsx', Storage::disk('uploads')->get(substr($path, 8)));
+
+        $this->actingAs((new User)->forceFill(['id' => 1]), 'api');
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()
+            ->assertJsonPath('status', 1)->assertJsonPath('description', $description)
+            ->assertJsonPath('urgenza', 92);
+        Mail::assertNothingSent();
+    }
+
+    public function test_signed_and_email_attachments_are_saved_under_verified_ticket_not_supplied_path(): void
+    {
+        $files = [];
+        foreach (['invoice.pdf.p7m', 'message.eml', 'outlook.MSG'] as $name) {
+            $files[] = $this->attachment($name, 'application/octet-stream');
+        }
+        $this->send(['files' => $files, 'uploadPath' => '../../tickets/999'])->assertOk();
+        $paths = Storage::disk('uploads')->allFiles();
+        $this->assertCount(3, $paths);
+        foreach ($paths as $path) {
+            $this->assertStringStartsWith('tickets/3235/', $path);
+            $name = explode('___', basename($path), 2)[1];
+            $this->assertContains($name, ['invoice.pdf.p7m', 'message.eml', 'outlook.MSG']);
+            $this->assertSame('Attachment '.$name, Storage::disk('uploads')->get($path));
+        }
+    }
+
+    public function test_same_named_attachments_do_not_overwrite_each_other_or_old_files(): void
+    {
+        Storage::disk('uploads')->put('tickets/3235/existing.pdf', 'old');
+        $this->send(['files' => [$this->attachment(), $this->attachment()]])->assertOk();
+        $this->send(['files' => [$this->attachment()]])->assertOk();
+        $this->assertCount(4, Storage::disk('uploads')->files('tickets/3235'));
+        $this->assertSame('old', Storage::disk('uploads')->get('tickets/3235/existing.pdf'));
+        $this->assertSame(2, substr_count(Ticket::find(3235)->description, 'test message'));
+    }
+
+    public function test_no_message_preserves_description_and_no_files_are_required(): void
+    {
+        $this->send(['message' => '   '])->assertOk();
+        $this->assertSame('Original description', Ticket::find(3235)->description);
+        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->assertSame([], Storage::disk('uploads')->allFiles());
+    }
+
+    public function test_first_message_has_no_leading_separator(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['description' => null]);
+        $this->send()->assertOk();
+        $this->assertSame('28/09/2026 12:30'.PHP_EOL.'test message', Ticket::find(3235)->description);
+    }
+
+    public function test_non_sollecito_update_preserves_existing_status_and_urgency(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3, 'urgenza' => '7']);
+        $this->send(['sollecito' => '0'])->assertOk();
+        $this->assertEquals(3, Ticket::find(3235)->status);
+        $this->assertSame('7', Ticket::find(3235)->urgenza);
+    }
+
+    public function test_sollecito_never_changes_an_existing_suspended_status(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
+        $this->send()->assertOk();
+        $this->assertEquals(3, Ticket::find(3235)->status);
+        $this->assertSame('7', Ticket::find(3235)->urgenza);
+    }
+
+    public function test_missing_sollecito_flag_preserves_both_fields(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
+        $this->putJson('/api/v1/client-outer-tickets/update', [
+            'ticketId' => 3235, 'token' => 'customer-test-token', 'message' => 'Follow-up',
+        ])->assertOk();
+        $this->assertEquals(3, Ticket::find(3235)->status);
+        $this->assertSame('0', Ticket::find(3235)->urgenza);
+    }
+
+    public static function fallbackOptions(): array
+    {
+        return [
+            [['parameter_value' => 'Non urgente']],
+            [['parameter_id' => 99]],
+            [['deleted_at' => '2026-09-01 00:00:00']],
+        ];
+    }
+
+    #[DataProvider('fallbackOptions')]
+    public function test_urgency_lookup_falls_back_by_name_when_92_is_not_the_active_urgency_option(array $changes): void
+    {
+        DB::table('parameter_values')->where('id', 92)->update($changes);
+        DB::table('parameter_values')->insert([
+            'id' => 192, 'parameter_id' => 17, 'parameter_value' => ' Sollecitato ', 'description' => '9',
+        ]);
+        $this->send()->assertOk();
+        $this->assertSame('9', Ticket::find(3235)->urgenza);
+        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()->assertJsonPath('urgenza', 192);
+    }
+
+    public function test_valid_92_is_preferred_over_another_same_named_option(): void
+    {
+        DB::table('parameter_values')->insert([
+            'id' => 192, 'parameter_id' => 17, 'parameter_value' => 'Sollecitato', 'description' => '9',
+        ]);
+        $this->send()->assertOk();
+        $this->assertSame('7', Ticket::find(3235)->urgenza);
+    }
+
+    public function test_missing_or_ambiguous_urgency_prevents_partial_changes(): void
+    {
+        DB::table('parameter_values')->where('id', 92)->delete();
+        $this->send(['files' => [$this->attachment()]])->assertUnprocessable();
+        $this->assertUnchanged();
+        DB::table('parameter_values')->insert([
+            ['id' => 192, 'parameter_id' => 17, 'parameter_value' => 'Sollecitato', 'description' => '7'],
+            ['id' => 193, 'parameter_id' => 17, 'parameter_value' => 'Sollecitato', 'description' => '9'],
+        ]);
+        $this->send()->assertUnprocessable();
+        $this->assertUnchanged();
+    }
+
+    public function test_empty_or_conflicting_stored_urgency_value_is_rejected(): void
+    {
+        foreach ([null, '', '0'] as $value) {
+            DB::table('parameter_values')->where('id', 92)->update(['description' => $value]);
+            $this->send()->assertUnprocessable();
+            $this->assertUnchanged();
+        }
+    }
+
+    public static function invalidRequests(): array
+    {
+        return [
+            [['token' => null]], [['token' => 'wrong']], [['ticketId' => 999]],
+            [['sollecito' => 2]], [['message' => ['bad']]], [['files' => 'bad']],
+            [['files' => [['actionStatus' => 'create', 'path' => 'not a file']]]],
+        ];
+    }
+
+    #[DataProvider('invalidRequests')]
+    public function test_invalid_requests_do_not_write_anything(array $overrides): void
+    {
+        $this->send(array_replace(['files' => [$this->attachment()]], $overrides))->assertUnprocessable();
+        $this->assertUnchanged();
+    }
+
+    public function test_closed_ticket_rejects_request_without_writing_files(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 2]);
+        $this->send(['files' => [$this->attachment()]])->assertStatus(409);
+        $this->assertUnchanged(2);
+    }
+
+    public function test_ticket_without_token_cannot_be_changed_by_omitting_token(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['email_token' => null]);
+        $this->send(['token' => null, 'files' => [$this->attachment()]])->assertUnprocessable();
+        $this->assertUnchanged();
+    }
+
+    public function test_invalid_later_attachment_prevents_all_uploads(): void
+    {
+        $this->send(['files' => [
+            $this->attachment(),
+            ['actionStatus' => 'create', 'path' => UploadedFile::fake()->create('large.pdf', 20481, 'application/pdf')],
+        ]])->assertUnprocessable()->assertJsonValidationErrors('files.1.path');
+        $this->assertUnchanged();
+    }
+
+    public function test_delete_action_and_unsafe_file_are_rejected_before_changes(): void
+    {
+        $file = $this->attachment();
+        $file['actionStatus'] = 'delete';
+        $this->send(['files' => [$file]])->assertUnprocessable();
+        $this->send(['files' => [$this->attachment('shell.php', 'application/x-httpd-php')]])->assertUnprocessable();
+        $this->send(['files' => [$this->attachment('shell.pdf', 'application/x-httpd-php')]])->assertUnprocessable();
+        $this->assertUnchanged();
+    }
+
+    public function test_failure_on_second_upload_rolls_back_database_and_removes_only_new_files(): void
+    {
+        Storage::disk('uploads')->put('tickets/3235/existing.pdf', 'old');
+        $realService = new UploadService;
+        $count = 0;
+        $this->mock(UploadService::class)->shouldReceive('uploadFile')->twice()
+            ->andReturnUsing(function ($data) use ($realService, &$count) {
+                if (++$count === 2) {
+                    throw new \RuntimeException('Storage unavailable');
+                }
+
+                return $realService->uploadFile($data);
+            });
+        $this->send(['files' => [$this->attachment(), $this->attachment()]])->assertStatus(500);
+        $this->assertSame(['tickets/3235/existing.pdf'], Storage::disk('uploads')->allFiles());
+        $this->assertSame('old', Storage::disk('uploads')->get('tickets/3235/existing.pdf'));
+        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->assertSame('Original description', Ticket::find(3235)->description);
+        $this->assertEquals(17, Ticket::find(3235)->updated_by);
+        $this->assertSame('0', Ticket::find(3235)->urgenza);
+        $this->assertSame(0, DB::transactionLevel());
+    }
+
+    public function test_false_storage_result_is_not_reported_as_success(): void
+    {
+        Storage::shouldReceive('disk')->with('uploads')->once()->andReturnSelf();
+        Storage::shouldReceive('putFileAs')->once()->andReturn(false);
+        $this->send(['files' => [$this->attachment()]])->assertStatus(500);
+        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->assertSame('Original description', Ticket::find(3235)->description);
+    }
+
+    public function test_audit_trait_still_records_authenticated_updates(): void
+    {
+        $this->actingAs((new User)->forceFill(['id' => 12]), 'api');
+        $this->send()->assertOk();
+        $this->assertEquals(12, Ticket::find(3235)->updated_by);
+    }
+
+    private function assertUnchanged(int $status = 1): void
+    {
+        $this->assertEquals($status, Ticket::find(3235)->status);
+        $this->assertSame('Original description', Ticket::find(3235)->description);
+        $this->assertSame('0', Ticket::find(3235)->urgenza);
+        $this->assertSame([], Storage::disk('uploads')->allFiles());
+        $this->assertSame(0, DB::transactionLevel());
+        Mail::assertNothingSent();
+    }
+}

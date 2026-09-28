@@ -7,7 +7,7 @@ use App\Http\Requests\ClientOuterTicket\UpdateClientOuterTicketRequest;
 use App\Http\Resources\ClientOuterTicket\AllClientOuterTicketCollection;
 use App\Http\Resources\ClientOuterTicket\ClientOuterTicketResource;
 use App\Mail\OuterTicketCreated;
-use App\Mail\TicketCreated;
+use App\Mail\OuterTicketRejected;
 use App\Models\Ticket;
 use App\Models\TicketClientContact;
 use App\Services\ClientOuterTicket\ClientOuterTicketService;
@@ -33,7 +33,7 @@ class OuterTicketController extends Controller
     }
 
     public function index(Request $request){
-
+        $request->validate(['isProcessed' => 'sometimes|boolean']);
 
         $allClientOuterTickets = $this->clientOuterTicketService->allClientOuterTickets($request->all());
 
@@ -57,7 +57,7 @@ class OuterTicketController extends Controller
             DB::beginTransaction();
             $clientOuterTicket = $this->clientOuterTicketService->updateClientOuterTicket($updateClientOuterTicketRequest->validated());
 
-            if($clientOuterTicket->accept_status == 1){
+            if($clientOuterTicket->accept_status === 1 && $clientOuterTicket->wasChanged('accept_status')){
                 $ticket = Ticket::create([
                     'client_id' => $clientOuterTicket->client_id,
                     'contract_id' => $clientOuterTicket->contract_id,
@@ -94,6 +94,10 @@ class OuterTicketController extends Controller
                 if($ticketClient?->email){
                     Mail::to($ticketClient->email)->send(new OuterTicketCreated($ticket));
                 }
+            }
+
+            if ($clientOuterTicket->accept_status === 2 && $clientOuterTicket->wasChanged('accept_status')) {
+                Mail::to($clientOuterTicket->email)->send(new OuterTicketRejected($clientOuterTicket));
             }
 
             DB::commit();

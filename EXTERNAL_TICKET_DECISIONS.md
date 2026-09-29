@@ -31,7 +31,13 @@ Rejection does not create an internal ticket or customer contact.
 The field is stored as `client_outer_tickets.rejection_reason` and returned as
 `rejectionReason` by both the list and detail APIs. Both also expose `acceptStatus`.
 Non-rejection updates ignore a supplied `rejectionReason` and retain saved reasons.
-Acceptance and normal editing retain their existing full update request fields.
+Acceptance and normal editing retain their existing update fields, except that
+`status` is now optional. Omitting it or sending null preserves the external
+request's current processing status and status date. When explicitly provided,
+it must be an integer from 0 to 3 and updates the external request as before.
+Every newly converted internal ticket starts with `status = 1` (active), a fresh
+status date, and no closer/end date, regardless of the external request's status.
+Repeated saves of the same acceptance do not reset an existing internal ticket.
 Omitting `acceptStatus` or sending `null` preserves the existing decision.
 
 The email subject is `Ticket Rejected`. It includes the external ticket number

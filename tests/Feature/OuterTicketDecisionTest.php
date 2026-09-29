@@ -220,6 +220,50 @@ class OuterTicketDecisionTest extends TestCase
         ];
     }
 
+    public static function optionalProcessingStatuses(): array
+    {
+        return [[false, null], [true, null], [true, 0], [true, 1], [true, 2], [true, 3]];
+    }
+
+    #[DataProvider('optionalProcessingStatuses')]
+    public function test_accepted_internal_ticket_always_starts_active(bool $includeStatus, ?int $status): void
+    {
+        $ticket = $this->ticket();
+        $ticket->forceFill(['closer_id' => 1, 'end_date' => '2026-01-01', 'status_date' => '2026-01-01'])->save();
+        $data = $this->fullUpdate($ticket) + ['acceptStatus' => 1];
+        $data['ticketClientId'] = '';
+        unset($data['status']);
+        if ($includeStatus) {
+            $data['status'] = $status;
+        }
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $internal = DB::table('tickets')->sole();
+        $this->assertEquals(1, $internal->status);
+        $this->assertNull($internal->closer_id);
+        $this->assertNull($internal->end_date);
+        $this->assertSame(now()->toDateString(), substr($internal->status_date, 0, 10));
+        $this->assertSame((string) ($status ?? 3), $ticket->fresh()->status);
+
+        // Re-saving an accepted request must not reactivate an existing closed internal ticket.
+        DB::table('tickets')->where('id', $internal->id)->update(['status' => 2]);
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $this->assertEquals(2, DB::table('tickets')->sole()->status);
+        Mail::assertSent(OuterTicketCreated::class, 1);
+    }
+
+    public function test_pending_update_without_status_preserves_processing_state_and_date(): void
+    {
+        $ticket = $this->ticket();
+        $ticket->forceFill(['status_date' => '2026-01-01'])->save();
+        $data = $this->fullUpdate($ticket) + ['acceptStatus' => 0];
+        unset($data['status']);
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $this->assertSame('3', $ticket->fresh()->status);
+        $this->assertSame('2026-01-01', $ticket->fresh()->status_date);
+        $this->assertSame(0, DB::table('tickets')->count());
+        Mail::assertNothingSent();
+    }
+
     #[DataProvider('listFilters')]
     public function test_list_filter_includes_correct_decisions_and_pagination(string $query, array $expected): void
     {

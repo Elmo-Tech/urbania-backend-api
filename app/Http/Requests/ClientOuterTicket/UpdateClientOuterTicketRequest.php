@@ -42,7 +42,7 @@ class UpdateClientOuterTicketRequest extends FormRequest
             'city' => 'nullable',
             'state' => 'nullable',
             'stats' => 'nullable',
-            "status" => "required_unless:acceptStatus,2",
+            'status' => 'nullable|integer|in:0,1,2,3',
             "clientId" => "required_unless:acceptStatus,2",
             'contractId' => 'nullable',
             'serviceId' => 'nullable',

@@ -104,7 +104,7 @@ class ClientOuterTicketService{
             return $clientOuterTicket;
         }
         $currentStatus = (string) $clientOuterTicket->status;
-        $newStatus = (string) ($clientOuterTicketData['status'] ?? 0);
+        $newStatus = (string) ($clientOuterTicketData['status'] ?? $clientOuterTicket->status);
         $message = $clientOuterTicketData['message'] ?? $clientOuterTicketData['description'] ?? '';
         $istanzaParameterId = $clientOuterTicketData['istanzaParameterId'] ?? $clientOuterTicketData['tipologiaIstanza'] ?? null;
         $state = $clientOuterTicketData['stats'] ?? $clientOuterTicketData['state'] ?? null;

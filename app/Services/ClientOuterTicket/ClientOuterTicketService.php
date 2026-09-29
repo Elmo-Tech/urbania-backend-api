@@ -30,11 +30,14 @@ class ClientOuterTicketService{
 
         $query = ClientOuterTicket::with('client');
 
-        if ((int) ($request['isProcessed'] ?? 0) === 1) {
-            $query->whereIn('accept_status', [1, 2]);
-        } else {
-            $query->where(function ($query) {
-                $query->where('accept_status', 0)->orWhereNull('accept_status');
+        $filter = trim($request['acceptStatus'] ?? '');
+        if ($filter !== '') {
+            $statuses = array_values(array_unique(array_map('intval', explode(',', $filter))));
+            $query->where(function ($query) use ($statuses) {
+                $query->whereIn('accept_status', $statuses);
+                if (in_array(0, $statuses, true)) {
+                    $query->orWhereNull('accept_status');
+                }
             });
         }
 

@@ -33,7 +33,9 @@ class OuterTicketController extends Controller
     }
 
     public function index(Request $request){
-        $request->validate(['isProcessed' => 'sometimes|boolean']);
+        $request->validate([
+            'acceptStatus' => ['sometimes', 'nullable', 'string', 'regex:/\A[012](?:\s*,\s*[012])*\z/'],
+        ]);
 
         $allClientOuterTickets = $this->clientOuterTicketService->allClientOuterTickets($request->all());
 

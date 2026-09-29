@@ -50,9 +50,19 @@ provider fails, the update fails and the decision/reason are rolled back togethe
 
 | Query | Returned decisions |
 | --- | --- |
-| `isProcessed=1` | Accepted (`1`) and rejected (`2`) together |
-| `isProcessed=0` | Pending (`0` or legacy `null`) only |
-| Omitted | Pending (`0` or legacy `null`) only |
+| Omitted or `acceptStatus=` | All decisions |
+| `acceptStatus=0` | Pending (`0` or legacy `null`) only |
+| `acceptStatus=1` | Accepted only |
+| `acceptStatus=2` | Rejected only |
+| `acceptStatus=0,1` | Pending and accepted |
+| `acceptStatus=1,2` | Accepted and rejected |
+| `acceptStatus=0,2` | Pending and rejected |
+| `acceptStatus=0,1,2` | All decisions |
+
+`acceptStatus` replaces `isProcessed`; the old query key is no longer used.
+Multiple values are comma-separated (not array syntax). Spaces around values and
+duplicates are accepted. Values must be 0, 1, or 2; malformed lists return 422.
+The update endpoint still accepts a single decision, not a list.
 
 Filtering happens before pagination, so totals and page counts describe the
 filtered results. Existing `page` and `pageSize` parameters continue to work.

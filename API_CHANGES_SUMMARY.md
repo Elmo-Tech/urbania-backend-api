@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `PUT /api/v1/outer-tickets/update` | `acceptStatus` | موجود أصلًا، أُضيفت قيمة الرفض `2` |
 | `PUT /api/v1/outer-tickets/update` | `rejectionReason` | جديد، مطلوب عند `acceptStatus = 2` |
-| `GET /api/v1/outer-tickets` | `isProcessed` | فلتر جديد: `1` المقبول والمرفوض، `0` أو عدم إرساله المعلق فقط |
+| `GET /api/v1/outer-tickets` | `acceptStatus` | بدل `isProcessed`: فاضي أو غير موجود = الكل؛ يقبل `0` أو `1` أو `2` أو قيمًا مفصولة بفواصل مثل `0,1` |
 | `GET /api/v1/outer-tickets` | `acceptStatus`, `rejectionReason` | حقول مضافة لرد القائمة |
 | `GET /api/v1/outer-tickets/edit?clientOuterTicketId={id}` | `rejectionReason` | حقل جديد في رد التفاصيل، و`acceptStatus` موجود أصلًا |
 
@@ -19,6 +19,9 @@
 | `2` | لا يوجد مسار رفض مخصص | رفض مع حفظ السبب وإيميل للعميل |
 
 `acceptStatus` منفصل عن `status` الخاص بالتيكت.
+
+فلتر القائمة: `0` المعلق بما فيه `null` القديم، `1` المقبول، `2` المرفوض. مثال: `GET /api/v1/outer-tickets?acceptStatus=0,1`.
+القيم المتعددة تخص راوت القائمة فقط؛ راوت التحديث ما زال يقبل قيمة واحدة.
 
 ## المواعيد
 

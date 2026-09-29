@@ -121,7 +121,7 @@ class OuterTicketDecisionTest extends TestCase
 
         $this->getJson('/api/v1/outer-tickets/edit?clientOuterTicketId='.$ticket->id)
             ->assertOk()->assertJsonPath('rejectionReason', $reason)->assertJsonPath('acceptStatus', 2);
-        $this->getJson('/api/v1/outer-tickets?isProcessed=1')
+        $this->getJson('/api/v1/outer-tickets?acceptStatus=2')
             ->assertOk()->assertJsonPath('clientOuterTickets.0.rejectionReason', $reason)
             ->assertJsonPath('clientOuterTickets.0.acceptStatus', 2);
     }
@@ -202,7 +202,22 @@ class OuterTicketDecisionTest extends TestCase
 
     public static function listFilters(): array
     {
-        return [['', [0, null]], ['?isProcessed=0', [0, null]], ['?isProcessed=1', [1, 2]]];
+        return [
+            ['', [0, null, 1, 2]],
+            ['?acceptStatus=', [0, null, 1, 2]],
+            ['?acceptStatus=%20%20', [0, null, 1, 2]],
+            ['?acceptStatus=0', [0, null]],
+            ['?acceptStatus=1', [1]],
+            ['?acceptStatus=2', [2]],
+            ['?acceptStatus=0,1', [0, null, 1]],
+            ['?acceptStatus=1,2', [1, 2]],
+            ['?acceptStatus=0,2', [0, null, 2]],
+            ['?acceptStatus=0,1,2', [0, null, 1, 2]],
+            ['?acceptStatus=2,0,2', [0, null, 2]],
+            ['?acceptStatus=0%2C%201', [0, null, 1]],
+            ['?isProcessed=1', [0, null, 1, 2]],
+            ['?isProcessed=0&acceptStatus=2', [2]],
+        ];
     }
 
     #[DataProvider('listFilters')]
@@ -213,21 +228,41 @@ class OuterTicketDecisionTest extends TestCase
         }
         $response = $this->getJson('/api/v1/outer-tickets'.$query)->assertOk();
         $this->assertEqualsCanonicalizing($expected, array_column($response->json('clientOuterTickets'), 'acceptStatus'));
-        $response->assertJsonPath('pagination.total', 2);
+        $response->assertJsonPath('pagination.total', count($expected));
 
         $separator = $query === '' ? '?' : '&';
-        $this->getJson('/api/v1/outer-tickets'.$query.$separator.'pageSize=1&page=2')
+        $page = min(2, count($expected));
+        $this->getJson('/api/v1/outer-tickets'.$query.$separator.'pageSize=1&page='.$page)
             ->assertOk()->assertJsonCount(1, 'clientOuterTickets')
-            ->assertJsonPath('pagination.total', 2)->assertJsonPath('pagination.total_pages', 2);
+            ->assertJsonPath('pagination.total', count($expected))
+            ->assertJsonPath('pagination.total_pages', count($expected));
     }
 
     public function test_invalid_filter_and_decision_are_rejected(): void
     {
-        $this->getJson('/api/v1/outer-tickets?isProcessed=2')->assertUnprocessable();
+        $this->getJson('/api/v1/outer-tickets?acceptStatus=3')->assertUnprocessable();
         $ticket = $this->ticket();
         $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($ticket) + ['acceptStatus' => 3])
             ->assertStatus(401)->assertJsonStructure(['message' => ['acceptStatus']]);
         Mail::assertNothingSent();
+    }
+
+    public static function invalidListFilters(): array
+    {
+        return [['-1'], ['0,3'], ['0,,1'], ['1,'], [',0'], ['null'], ['true'], ['1.0'], ['01'], ['1;2'], ['bad']];
+    }
+
+    #[DataProvider('invalidListFilters')]
+    public function test_invalid_list_filters_return_validation_errors(string $filter): void
+    {
+        $this->getJson('/api/v1/outer-tickets?acceptStatus='.rawurlencode($filter))
+            ->assertUnprocessable()->assertJsonValidationErrors('acceptStatus');
+    }
+
+    public function test_array_filter_is_rejected_instead_of_causing_a_server_error(): void
+    {
+        $this->getJson('/api/v1/outer-tickets?acceptStatus[]=0&acceptStatus[]=1')
+            ->assertUnprocessable()->assertJsonValidationErrors('acceptStatus');
     }
 
     public function test_rejection_without_valid_email_returns_error_instead_of_silent_success(): void

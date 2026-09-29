@@ -1,0 +1,11 @@
+From: Upload Test <sender@example.com>
+To: Test Recipient <recipient@example.com>
+Date: Tue, 29 Sep 2026 12:00:00 +0200
+Subject: Urbania attachment upload test
+Message-ID: <urbania-upload-sample-20260929@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+This is a sample email for testing attachment uploads in Urbania.
+All addresses and message content are fictional. This email was not sent.

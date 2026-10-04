@@ -17,6 +17,6 @@ class OuterTicketRejected extends Mailable
 
     public function build()
     {
-        return $this->subject('Ticket Rejected')->view('emails.rejectedOuterTicket');
+        return $this->subject('Urbania ha rifiutato la segnalazione')->view('emails.rejectedOuterTicket');
     }
 }

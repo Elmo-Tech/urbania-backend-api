@@ -40,7 +40,7 @@ status date, and no closer/end date, regardless of the external request's status
 Repeated saves of the same acceptance do not reset an existing internal ticket.
 Omitting `acceptStatus` or sending `null` preserves the existing decision.
 
-The email subject is `Ticket Rejected`. It includes the external ticket number
+The email subject is `Urbania ha rifiutato la segnalazione`. It includes the external ticket number
 and the saved reason, with HTML escaped and line breaks preserved. It uses the
 configured Laravel mail transport (Microsoft Graph in deployment).
 

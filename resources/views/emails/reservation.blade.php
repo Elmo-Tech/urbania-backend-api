@@ -1,32 +1,32 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reservation Confirmation</title>
+    <title>Conferma appuntamento</title>
 </head>
 <body style="margin:0; padding:24px; font-family:Arial, Helvetica, sans-serif; background-color:#ffffff; color:#1f2937;">
     <div style="max-width:720px; margin:0 auto;">
-        <h1 style="margin:0 0 28px; font-size:28px; line-height:1.2; color:#111827;">Reservation Confirmation</h1>
+        <h1 style="margin:0 0 28px; font-size:28px; line-height:1.2; color:#111827;">Conferma appuntamento</h1>
 
         <p style="margin:0 0 16px; font-size:16px; line-height:1.7;">
-            Your reservation has been confirmed with the following details:
+            Il suo appuntamento &egrave; stato confermato con i seguenti dettagli:
         </p>
 
         <ul style="margin:0 0 28px 28px; padding:0; font-size:16px; line-height:1.8;">
             <li>
-                Date:
+                Data:
                 {{ \Carbon\Carbon::parse($reservation->date)->format('d/m/Y H:i') }}
             </li>
         </ul>
 
         <p style="margin:0 0 28px; font-size:16px; line-height:1.7;">
-            <a href="{{ $controlUrl }}" style="color:#2563eb; text-decoration:underline;">Confirm Reservation</a>
+            <a href="{{ $controlUrl }}" style="color:#2563eb; text-decoration:underline;">Conferma appuntamento</a>
         </p>
 
         <p style="margin:0 0 24px; font-size:16px; line-height:1.7;">
-            Thank you for choosing us!
+            Grazie per averci scelto!
         </p>
 
     </div>

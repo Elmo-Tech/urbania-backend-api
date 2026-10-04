@@ -32,7 +32,7 @@ class ConfirmReservation extends Mailable
      */
     public function build()
     {
-        return $this->subject('Reservation Confirmation')
+        return $this->subject('Conferma appuntamento')
                     ->view('emails.reservation')
                     ->with([
                         'reservation' => $this->reservation,

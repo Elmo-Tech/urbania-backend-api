@@ -25,7 +25,7 @@ class OuterTicketCreated extends Mailable
 
         public function build()
         {
-            return $this->subject('Ticket Accepted')
+            return $this->subject('Segnalazione accettata')
                         ->view('emails.createdOuterTicket')
                         ->with([
                             'ticket' => $this->ticket,

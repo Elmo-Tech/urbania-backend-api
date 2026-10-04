@@ -30,7 +30,7 @@ class RefuseReservation extends Mailable
      */
     public function build()
     {
-        return $this->subject('Your Reservation Refused')
+        return $this->subject('Appuntamento rifiutato')
                     ->view('emails.refuse_reservation')
                     ->with([
                         'reservation' => $this->reservation

@@ -66,7 +66,7 @@ class MicrosoftGraphMailTest extends TestCase
         Mail::to('recipient@example.com')->send(new OuterTicketRejected($ticket));
 
         Http::assertSent(fn (Request $request) => $request->url() === self::SEND_URL
-            && $request['message']['subject'] === 'Ticket Rejected'
+            && $request['message']['subject'] === 'Urbania ha rifiutato la segnalazione'
             && str_contains($request['message']['body']['content'], 'T-000042')
             && str_contains($request['message']['body']['content'], 'Missing document')
             && str_contains($request['message']['body']['content'], '&lt;script&gt;')

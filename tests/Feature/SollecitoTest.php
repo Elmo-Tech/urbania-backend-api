@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Ticket\TicketClient\TicketClientService;
 use App\Services\Upload\UploadService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\UploadedFile;
@@ -107,6 +108,47 @@ class SollecitoTest extends TestCase
             ->assertJsonPath('status', 1)->assertJsonPath('description', $description)
             ->assertJsonPath('urgenza', 92);
         Mail::assertNothingSent();
+    }
+
+    public function test_repeated_customer_request_appends_once_per_request_not_once_per_message(): void
+    {
+        $entry = PHP_EOL.'28/09/2026 12:30'.PHP_EOL.'test message';
+
+        $this->send()->assertOk();
+        $this->assertSame('Original description'.$entry, Ticket::findOrFail(3235)->description);
+
+        $this->send()->assertOk();
+        $this->assertSame('Original description'.$entry.$entry, Ticket::findOrFail(3235)->description);
+    }
+
+    public function test_customer_service_update_does_not_duplicate_sollecito_text_or_date(): void
+    {
+        $this->send()->assertOk();
+        $description = Ticket::findOrFail(3235)->description;
+        Schema::table('tickets', function (Blueprint $table) {
+            $table->unsignedBigInteger('closer_id')->nullable();
+        });
+        // Isolate contact maintenance, while running the real ticket update and persistence.
+        $this->mock(TicketClientService::class, function ($mock) {
+            $mock->shouldReceive('updateTicketClient')->twice()->andReturn(3198);
+        });
+        $this->actingAs((new User)->forceFill(['id' => 1]), 'api');
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $payload = [
+            'ticketId' => 3235, 'ticketClientId' => 3198, 'clientId' => 10,
+            'contractId' => '18##16', 'serviceId' => 27, 'workerId' => '',
+            'notifyDate' => null, 'status' => 1, 'description' => $description,
+            'connectTypeId' => null, 'note' => null, 'anno' => ['2020'], 'urgenza' => 92,
+        ];
+
+        foreach ([1, 2] as $attempt) {
+            $this->putJson('/api/v1/tickets/update', $payload)->assertOk();
+            $this->assertSame($description, Ticket::findOrFail(3235)->description);
+            $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()
+                ->assertJsonPath('description', $description);
+            $this->assertSame(1, substr_count(Ticket::findOrFail(3235)->description, '28/09/2026 12:30'));
+            $this->assertSame(1, substr_count(Ticket::findOrFail(3235)->description, 'test message'));
+        }
     }
 
     public function test_signed_and_email_attachments_are_saved_under_verified_ticket_not_supplied_path(): void

@@ -22,7 +22,7 @@
 
         <p style="margin:0 0 24px;">
             <a href="{{ $editUrl }}" style="display:inline-block; padding:12px 18px; background-color:#111827; color:#ffffff; text-decoration:none; border-radius:8px; font-size:15px;">
-                Modifica segnalazione
+                Modifica / integra / sollecita segnalazione
             </a>
         </p>
 

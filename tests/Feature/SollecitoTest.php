@@ -196,7 +196,7 @@ class SollecitoTest extends TestCase
     public function test_zero_restores_non_urgent_without_changing_status(): void
     {
         DB::table('tickets')->where('id', 3235)->update(['status' => 3, 'urgenza' => '7']);
-        $this->send(['sollecito' => '0'])->assertOk();
+        $this->send(['sollecito' => '0', 'message' => ''])->assertOk()->assertJsonPath('status', 3);
         $this->assertEquals(3, Ticket::find(3235)->status);
         $this->assertSame('0', Ticket::find(3235)->urgenza);
     }
@@ -209,11 +209,11 @@ class SollecitoTest extends TestCase
         foreach ($values as $index => $value) {
             $this->send(['sollecito' => $value, 'message' => 'Follow-up '.$index])->assertOk();
             $ticket = Ticket::find(3235);
-            $this->assertEquals(3, $ticket->status);
+            $this->assertEquals(1, $ticket->status);
             $this->assertSame($value ? '7' : '0', $ticket->urgenza);
             $this->assertStringContainsString('Follow-up '.$index, $ticket->description);
             $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()
-                ->assertJsonPath('status', 3)->assertJsonPath('urgenza', $value ? 92 : 91);
+                ->assertJsonPath('status', 1)->assertJsonPath('urgenza', $value ? 92 : 91);
         }
         $this->assertSame(count($values), substr_count(Ticket::find(3235)->description, 'Follow-up'));
         Mail::assertNothingSent();
@@ -239,22 +239,85 @@ class SollecitoTest extends TestCase
         $this->assertUnchanged();
     }
 
-    public function test_sollecito_never_changes_an_existing_suspended_status(): void
+    public static function suspendedFollowUps(): array
     {
-        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
-        $this->send()->assertOk();
-        $this->assertEquals(3, Ticket::find(3235)->status);
-        $this->assertSame('7', Ticket::find(3235)->urgenza);
+        return [
+            'reminder only' => [['sollecito' => '1'], false, '7'],
+            'message only' => [['message' => 'More information'], false, '0'],
+            'message with reminder disabled' => [['sollecito' => '0', 'message' => 'More information'], false, '0'],
+            'attachment only' => [[], true, '0'],
+            'attachment with reminder disabled' => [['sollecito' => '0'], true, '0'],
+            'reminder and integration' => [['sollecito' => '1', 'message' => 'More information'], true, '7'],
+        ];
     }
 
-    public function test_missing_sollecito_flag_preserves_both_fields(): void
+    #[DataProvider('suspendedFollowUps')]
+    public function test_customer_follow_up_reactivates_suspended_ticket(array $payload, bool $withFile, string $urgency): void
+    {
+        DB::table('tickets')->where('id', 3235)->update([
+            'status' => 3, 'status_date' => '2026-09-01 00:00:00',
+        ]);
+        if ($withFile) {
+            $payload['files'] = [$this->attachment()];
+        }
+        $this->post('/api/v1/client-outer-tickets/update', array_merge([
+            '_method' => 'PUT', 'ticketId' => '3235', 'token' => 'customer-test-token',
+        ], $payload), ['Accept' => 'application/json'])->assertOk()->assertJsonPath('status', 1);
+
+        $ticket = Ticket::findOrFail(3235);
+        $this->assertEquals(1, $ticket->status);
+        $this->assertSame('2026-09-28 12:30:00', $ticket->status_date);
+        $this->assertNull($ticket->end_date);
+        $this->assertSame($urgency, $ticket->urgenza);
+        $this->assertSame('5', $ticket->segnalazione);
+        $this->assertSame(isset($payload['message'])
+            ? 'Original description'.PHP_EOL.'28/09/2026 12:30'.PHP_EOL.$payload['message']
+            : 'Original description', $ticket->description);
+        $this->assertCount($withFile ? 1 : 0, Storage::disk('uploads')->allFiles());
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()->assertJsonPath('status', 1);
+        Mail::assertNothingSent();
+    }
+
+    public function test_missing_sollecito_flag_preserves_urgency_when_reactivating(): void
     {
         DB::table('tickets')->where('id', 3235)->update(['status' => 3, 'urgenza' => '7']);
         $this->putJson('/api/v1/client-outer-tickets/update', [
             'ticketId' => 3235, 'token' => 'customer-test-token', 'message' => 'Follow-up',
-        ])->assertOk();
-        $this->assertEquals(3, Ticket::find(3235)->status);
+        ])->assertOk()->assertJsonPath('status', 1);
+        $this->assertEquals(1, Ticket::find(3235)->status);
         $this->assertSame('7', Ticket::find(3235)->urgenza);
+    }
+
+    public function test_empty_update_does_not_reactivate_a_suspended_ticket(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update([
+            'status' => 3, 'status_date' => '2026-09-01 00:00:00',
+        ]);
+        foreach ([[], ['message' => '   ', 'files' => []], ['sollecito' => '0']] as $payload) {
+            $this->putJson('/api/v1/client-outer-tickets/update', array_merge([
+                'ticketId' => 3235, 'token' => 'customer-test-token',
+            ], $payload))->assertOk()->assertJsonPath('status', 3);
+            $this->assertUnchanged(3);
+            $this->assertSame('2026-09-01 00:00:00', Ticket::find(3235)->status_date);
+        }
+    }
+
+    public function test_follow_up_does_not_reset_the_status_date_of_an_active_ticket(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status_date' => '2026-09-01 00:00:00']);
+        $this->send()->assertOk()->assertJsonPath('status', 1);
+        $this->assertSame('2026-09-01 00:00:00', Ticket::find(3235)->status_date);
+    }
+
+    public function test_invalid_follow_up_does_not_reactivate_a_suspended_ticket(): void
+    {
+        DB::table('tickets')->where('id', 3235)->update(['status' => 3]);
+        $this->send(['token' => 'wrong'])->assertUnprocessable();
+        $this->assertUnchanged(3);
+        DB::table('parameter_values')->where('id', 92)->delete();
+        $this->send(['files' => [$this->attachment()]])->assertUnprocessable();
+        $this->assertUnchanged(3);
     }
 
     public static function fallbackOptions(): array
@@ -360,8 +423,17 @@ class SollecitoTest extends TestCase
         $this->assertUnchanged();
     }
 
-    public function test_failure_on_second_upload_rolls_back_database_and_removes_only_new_files(): void
+    public static function updatableStatuses(): array
     {
+        return [[1], [3]];
+    }
+
+    #[DataProvider('updatableStatuses')]
+    public function test_failure_on_second_upload_rolls_back_database_and_removes_only_new_files(int $status): void
+    {
+        DB::table('tickets')->where('id', 3235)->update([
+            'status' => $status, 'status_date' => '2026-09-01 00:00:00',
+        ]);
         Storage::disk('uploads')->put('tickets/3235/existing.pdf', 'old');
         $realService = new UploadService;
         $count = 0;
@@ -376,7 +448,8 @@ class SollecitoTest extends TestCase
         $this->send(['files' => [$this->attachment(), $this->attachment()]])->assertStatus(500);
         $this->assertSame(['tickets/3235/existing.pdf'], Storage::disk('uploads')->allFiles());
         $this->assertSame('old', Storage::disk('uploads')->get('tickets/3235/existing.pdf'));
-        $this->assertEquals(1, Ticket::find(3235)->status);
+        $this->assertEquals($status, Ticket::find(3235)->status);
+        $this->assertSame('2026-09-01 00:00:00', Ticket::find(3235)->status_date);
         $this->assertSame('Original description', Ticket::find(3235)->description);
         $this->assertEquals(17, Ticket::find(3235)->updated_by);
         $this->assertSame('0', Ticket::find(3235)->urgenza);

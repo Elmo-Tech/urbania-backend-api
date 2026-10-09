@@ -22,7 +22,7 @@
         </ul>
 
         <p style="margin:0 0 28px; font-size:16px; line-height:1.7;">
-            <a href="{{ $controlUrl }}" style="color:#2563eb; text-decoration:underline;">Conferma appuntamento</a>
+            <a href="{{ $controlUrl }}" style="color:#2563eb; text-decoration:underline;">Annulla appuntamento</a>
         </p>
 
         <p style="margin:0 0 24px; font-size:16px; line-height:1.7;">

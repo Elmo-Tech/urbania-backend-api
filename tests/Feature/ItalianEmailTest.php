@@ -31,7 +31,7 @@ class ItalianEmailTest extends TestCase
         $this->assertStringContainsString('Segnalazione accettata correttamente.', $html);
         $this->assertStringContainsString('Numero segnalazione:', $html);
         $this->assertStringContainsString('Data di creazione:', $html);
-        $this->assertStringContainsString('Modifica segnalazione', $html);
+        $this->assertStringContainsString('Modifica / integra / sollecita segnalazione', $html);
         $this->assertStringContainsString('42_2026', $html);
         $this->assertStringContainsString('04/10/2026 12:30', $html);
         $this->assertSame(['https://frontend.example.test/sollecito?ticketId=42&token=test-token'], $this->links($html));
@@ -73,7 +73,7 @@ class ItalianEmailTest extends TestCase
         $this->assertStringContainsString('Il suo appuntamento &egrave; stato confermato con i seguenti dettagli:', $html);
         $this->assertStringContainsString('Data:', $html);
         $this->assertStringContainsString('04/10/2026 12:30', $html);
-        $this->assertStringContainsString('>Conferma appuntamento</a>', $html);
+        $this->assertStringContainsString('>Annulla appuntamento</a>', $html);
         $this->assertStringContainsString('Grazie per averci scelto!', $html);
         $this->assertSame(['https://frontend.example.test/reservation-control?reservationId=7&token=reservation-token'], $this->links($html));
     }

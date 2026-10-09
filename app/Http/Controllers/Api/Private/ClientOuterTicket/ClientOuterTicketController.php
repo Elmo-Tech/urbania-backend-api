@@ -100,6 +100,12 @@ class ClientOuterTicketController extends Controller
                     // Tickets store the option's description; the edit API maps it back to its ID.
                     $ticket->urgenza = $urgency->description;
                 }
+                $hasFollowUp = !empty($data['sollecito']) || $message !== '' || !empty($data['files']);
+                if ((int) $ticket->status === 3 && $hasFollowUp) {
+                    $ticket->status = 1;
+                    $ticket->status_date = now();
+                    $ticket->end_date = null;
+                }
                 $ticket->save();
 
                 foreach ($data['files'] ?? [] as $file) {
@@ -111,7 +117,10 @@ class ClientOuterTicketController extends Controller
                     $uploadedPaths[] = substr($path, strlen('uploads/'));
                 }
 
-                return response()->json(['message' => 'ticket has been updated !'], 200);
+                return response()->json([
+                    'message' => 'ticket has been updated !',
+                    'status' => (int) $ticket->status,
+                ], 200);
             });
         } catch (\Throwable $e) {
             // The database transaction cannot undo disk writes; remove only this request's new files.

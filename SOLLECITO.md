@@ -11,7 +11,12 @@ needed for this fix.
 - `sollecito`: optional boolean (0/1, including multipart strings). When 1,
   `Urgenza` becomes **Sollecitato**. When 0, it becomes **Non urgente**.
   When omitted, urgency is unchanged. Repeated requests can switch in either direction.
-  The ticket's `status` is always preserved; this endpoint does not suspend it.
+- A suspended ticket (`status = 3`, Sospeso) becomes active (`status = 1`, Attivo)
+  when the request includes `sollecito=1`, a nonblank `message`, or at least one
+  valid new attachment. Reactivation updates `status_date` and clears `end_date`.
+  An empty update or `sollecito=0` alone does not reactivate it. An already-active
+  ticket keeps its status and status date. The response includes the saved numeric
+  `status` alongside the existing success message.
 - `message`: optional text appended to `tickets.description`, preceded by
   `d/m/Y H:i`. Existing description content is preserved. Blank text is ignored.
 - `files[i][path]`: the uploaded binary file.
@@ -55,6 +60,7 @@ No existing ticket statuses are bulk-reverted by this change.
 - Ticket rows are locked during updates to preserve concurrent appended messages.
 - A failed upload rolls back the database transaction. Already-uploaded files
   from that request are deleted; existing attachments are not removed.
+  Reactivation and its status date are rolled back with the message and urgency.
 - The shared audit trait allows unauthenticated token-based updates to record
   `updated_by = null` instead of failing. Authenticated updates still record the
   user's ID.

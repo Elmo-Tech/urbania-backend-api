@@ -3,14 +3,10 @@
 namespace App\Http\Controllers\Api\Private\Reservation;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Reservation\ReservationSchedule\AllReservationScheduleCollection;
 use App\Models\Reservation\Reservation;
 use App\Models\Reservation\ReservationSchedule;
-use App\Services\Reservation\ReservationScheduleService;
-use App\Utils\PaginateCollection;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use App\Models\Client;
 
 class FreeReservationScheduleController extends Controller
@@ -23,81 +19,19 @@ class FreeReservationScheduleController extends Controller
         $startDate = Carbon::parse($request->startDate);
         $endDate = Carbon::parse($request->endDate);
 
-        // Retrieve client's reservation schedule
-        $clientReservationSchedule = ReservationSchedule::where('client_id', $clientId)->first();
+        $clientReservationSchedules = ReservationSchedule::where('client_id', $clientId)->get();
 
-        if (!$clientReservationSchedule) {
+        if ($clientReservationSchedules->isEmpty()) {
             return response()->json(['error' => 'No schedule found for the client'], 404);
         }
 
-        $schedule = $clientReservationSchedule->schedule;
+        $schedule = $clientReservationSchedules->flatMap(fn ($row) => $row->schedule)->all();
         $result = [];
 
         // Iterate through each day in the date range
         for ($date = $startDate->copy(); $date->lte($endDate); $date->addDay()) {
             $formattedDate = $date->toDateString();
-            $dayOfWeek = strtolower($date->format('l')); // Example: 'monday'
-
-            // Initialize empty array to store available times for the current date
-            $freeTimes = [];
-
-            // Process fixed schedule (e.g., Sundays)
-            $fixedDaySchedule = collect($schedule)->first(function ($item) use ($dayOfWeek) {
-                return $item['type'] === 'fixed' && $item['day'] === $dayOfWeek;
-            });
-
-            if ($fixedDaySchedule) {
-                $availableTimes = $fixedDaySchedule['availableTimes'];
-                $appointmentTime = (int) $fixedDaySchedule['appointmentTime'];
-                $restEachTime = (int) $fixedDaySchedule['restEachTime'];
-                $slots = [];
-
-                // Generate time slots
-                foreach ($availableTimes as $timeRange) {
-                    [$startTime, $endTime] = explode(' - ', $timeRange);
-
-                    $currentTime = $date->copy()->setTimeFromTimeString($startTime);
-                    $endDateTime = $date->copy()->setTimeFromTimeString($endTime);
-
-                    while ($currentTime->lt($endDateTime)) {
-                        $slots[] = $currentTime->format('H:i');
-                        $currentTime->addMinutes($appointmentTime + $restEachTime);
-                    }
-                }
-
-                // Add generated slots to freeTimes
-                $freeTimes = array_merge($freeTimes, $slots);
-            }
-
-            // Process dedicated schedule (e.g., specific date like '2024-12-23')
-            $dedicatedDateSchedule = collect($schedule)->first(function ($item) use ($formattedDate) {
-                return $item['type'] === 'dedicated' && $item['date'] === $formattedDate;
-            });
-
-
-
-            if ($dedicatedDateSchedule) {
-                $availableTimes = $dedicatedDateSchedule['availableTimes'];
-                $appointmentTime = (int) $dedicatedDateSchedule['appointmentTime'];
-                $restEachTime = (int) $dedicatedDateSchedule['restEachTime'];
-                $slots = [];
-
-                // Generate time slots
-                foreach ($availableTimes as $timeRange) {
-                    [$startTime, $endTime] = explode(' - ', $timeRange);
-
-                    $currentTime = $date->copy()->setTimeFromTimeString($startTime);
-                    $endDateTime = $date->copy()->setTimeFromTimeString($endTime);
-
-                    while ($currentTime->lt($endDateTime)) {
-                        $slots[] = $currentTime->format('H:i');
-                        $currentTime->addMinutes($appointmentTime + $restEachTime);
-                    }
-                }
-
-                // Add generated slots to freeTimes
-                $freeTimes = array_merge($freeTimes, $slots);
-            }
+            $freeTimes = $this->scheduledTimes($schedule, $date);
 
             // If there are no available times for the day, skip this date
             if (empty($freeTimes)) {
@@ -141,44 +75,18 @@ class FreeReservationScheduleController extends Controller
         $date = Carbon::parse($request->date);
         $time = Carbon::parse($request->time);
 
-        // Retrieve client's reservation schedule
-        $clientReservationSchedule = ReservationSchedule::where('client_id', $clientId)->first();
+        $clientReservationSchedules = ReservationSchedule::where('client_id', $clientId)->get();
 
-        if (!$clientReservationSchedule) {
+        if ($clientReservationSchedules->isEmpty()) {
             return response()->json(['error' => 'No schedule found for the client'], 404);
         }
 
-        $schedule = $clientReservationSchedule->schedule;
-        $dayOfWeek = strtolower($date->format('l')); // E.g., 'sunday'
+        $schedule = $clientReservationSchedules->flatMap(fn ($row) => $row->schedule)->all();
         $formattedDate = $date->toDateString();
+        $slots = $this->scheduledTimes($schedule, $date);
 
-
-        // Find schedule for this specific date or day
-        $daySchedule = collect($schedule)->first(function ($item) use ($dayOfWeek, $formattedDate) {
-            return $item['day'] === $dayOfWeek || $item['day'] === $formattedDate;
-        });
-
-
-        if (!$daySchedule || empty($daySchedule['availableTimes'])) {
+        if (empty($slots)) {
             return response()->json(['available' => false, 'message' => 'No schedule available for this day']);
-        }
-
-
-        $availableTimes = $daySchedule['availableTimes'];
-        $appointmentTime = (int) $daySchedule['appointmentTime'];
-        $restEachTime = (int) $daySchedule['restEachTime'];
-        $slots = [];
-
-        foreach ($availableTimes as $timeRange) {
-            [$startTime, $endTime] = explode(' - ', $timeRange);
-
-            $currentTime = $date->copy()->setTimeFromTimeString($startTime);
-            $endDateTime = $date->copy()->setTimeFromTimeString($endTime);
-
-            while ($currentTime->lt($endDateTime)) {
-                $slots[] = $currentTime->format('H:i');
-                $currentTime->addMinutes($appointmentTime + $restEachTime);
-            }
         }
 
         // Fetch reservations for the specified date
@@ -198,6 +106,48 @@ class FreeReservationScheduleController extends Controller
             'available' => $isAvailable,
             'message' => $isAvailable ? 'The time is available' : 'The time is not available',
         ]);
+    }
+
+    private function scheduledTimes(array $schedule, Carbon $date): array
+    {
+        $dayOfWeek = strtolower($date->format('l'));
+        $formattedDate = $date->toDateString();
+        $slots = [];
+
+        // Fixed weekdays and dedicated dates both contribute availability, as before.
+        foreach ($schedule as $item) {
+            $matches = (($item['type'] ?? null) === 'fixed' && ($item['day'] ?? null) === $dayOfWeek)
+                || (($item['type'] ?? null) === 'dedicated' && ($item['date'] ?? null) === $formattedDate);
+            if (!$matches) {
+                continue;
+            }
+
+            $appointmentTime = (int) ($item['appointmentTime'] ?? 0);
+            $restEachTime = (int) ($item['restEachTime'] ?? 0);
+            // Invalid legacy entries must not trap either endpoint in a non-advancing loop.
+            if ($appointmentTime <= 0 || $restEachTime < 0) {
+                continue;
+            }
+
+            foreach ($item['availableTimes'] ?? [] as $timeRange) {
+                if (!is_string($timeRange) || !preg_match('/^([01]?\d|2[0-3]):[0-5]\d - ([01]?\d|2[0-3]):[0-5]\d$/', $timeRange)) {
+                    continue;
+                }
+                [$startTime, $endTime] = explode(' - ', $timeRange);
+                $currentTime = $date->copy()->setTimeFromTimeString($startTime);
+                $endDateTime = $date->copy()->setTimeFromTimeString($endTime);
+
+                while ($currentTime->lt($endDateTime)) {
+                    $slots[] = $currentTime->format('H:i');
+                    $currentTime->addMinutes($appointmentTime + $restEachTime);
+                }
+            }
+        }
+
+        $slots = array_values(array_unique($slots));
+        sort($slots);
+
+        return $slots;
     }
 
     private function removeExpiredIncompleteReservations(): void

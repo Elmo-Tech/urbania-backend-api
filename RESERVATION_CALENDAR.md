@@ -1,5 +1,26 @@
 # Reservation calendar decisions
 
+## Public schedule availability
+
+`GET /api/v1/free-schedules` and its `check-availability` endpoint read all active
+schedule records for the requested client. Weekly entries (`type: fixed`) match
+`day`; date-specific entries (`type: dedicated`) match `date`. Both types add
+availability when they match the same day, including entries in separate records.
+Slots are sorted and deduplicated before checking existing reservations.
+
+Appointment duration and the break between slots retain their existing meaning.
+The existing reservation filtering, expired incomplete reservation cleanup,
+response shapes, and requested date range remain in place. Invalid legacy time
+ranges or nonpositive appointment durations are skipped so they cannot break or
+stall availability for valid entries. No migration or frontend payload change is
+needed for this availability fix.
+
+Regression tests (isolated SQLite, including Solarolo and Voltido schedules):
+
+```sh
+php vendor/phpunit/phpunit/phpunit tests/Feature/FreeReservationScheduleTest.php
+```
+
 ## Deployment
 
 Run against the application's populated database before serving the updated code:

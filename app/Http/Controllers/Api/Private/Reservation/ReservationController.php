@@ -24,7 +24,12 @@ class ReservationController extends Controller
 
     public function __construct(ReservationService $reservationService, ReservationCalendarService $calendarService)
     {
-        //$this->middleware('auth:api');
+        $this->middleware('auth:api');
+        $this->middleware('permission:allReservation,api')->only('index');
+        $this->middleware('permission:createReservation,api')->only('create');
+        $this->middleware('permission:editReservation,api')->only('edit');
+        $this->middleware('permission:updateReservation,api')->only('update');
+        $this->middleware('permission:deleteReservation,api')->only(['destroy', 'destroyUncompletedReservations']);
         $this->reservationService = $reservationService;
         $this->calendarService = $calendarService;
     }

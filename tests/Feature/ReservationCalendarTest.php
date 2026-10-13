@@ -29,6 +29,12 @@ class ReservationCalendarTest extends TestCase
             'jwt.secret' => str_repeat('test-key', 8),
         ]);
         Mail::fake();
+        require_once database_path('migrations/2023_08_01_124726_create_permission_tables.php');
+        (new \CreatePermissionTables)->up();
+        $permission = \Spatie\Permission\Models\Permission::create(['name' => 'updateReservation', 'guard_name' => 'api']);
+        DB::table('model_has_permissions')->insert([
+            'permission_id' => $permission->id, 'model_type' => User::class, 'model_id' => 1,
+        ]);
 
         // Exercise the real controllers and services without the unrelated legacy migrations.
         foreach ([

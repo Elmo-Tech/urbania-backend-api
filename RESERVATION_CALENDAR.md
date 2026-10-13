@@ -1,5 +1,36 @@
 # Reservation calendar decisions
 
+## Admin reservation access
+
+All `/api/v1/reservations` routes require a valid API bearer token plus an
+action-specific permission:
+
+| Route | Permission |
+| --- | --- |
+| `GET /api/v1/reservations` | `allReservation` |
+| `POST /api/v1/reservations/create` | `createReservation` |
+| `GET /api/v1/reservations/edit` | `editReservation` |
+| `PUT /api/v1/reservations/update` | `updateReservation` |
+| `DELETE /api/v1/reservations/delete` | `deleteReservation` |
+
+Before deploying these checks, execute
+`database/sql/grant_reservation_permissions.sql` on the application database,
+then run `php artisan permission:cache-reset` on the application server. The SQL
+creates missing permissions and assigns all five to every existing `api` role,
+including `standard`, `limitata`, and `superLimitata`, as requested. It preserves
+other assignments and can be rerun. Future roles require assignment or a rerun.
+It does not grant `web` permissions to API users or change users' roles.
+
+API JSON requests without authentication receive 401; authenticated users without
+the action permission receive 403. Customer booking routes, token-based email
+decisions, and public availability endpoints retain their existing access rules.
+Frontend menu, route, and button checks must use the corresponding permissions;
+a frontend restriction to admin roles will still hide this section from others.
+
+Verify with `php vendor/phpunit/phpunit/phpunit tests/Feature/ReservationPermissionsTest.php`.
+These tests execute the SQL inserts against isolated SQLite (adapting only the
+transaction-start syntax); they do not execute the SQL on the live database.
+
 ## Public schedule availability
 
 `GET /api/v1/free-schedules` and its `check-availability` endpoint read all active

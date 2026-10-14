@@ -36,7 +36,7 @@ class ReservationPermissionsTest extends TestCase
         $this->grantPermissions();
 
         foreach ([
-            'users' => ['username', 'email', 'password'],
+            'users' => ['username', 'email', 'password', 'status'],
             'clients' => ['company_name', 'firstname', 'lastname'],
             'reservations' => ['firstname', 'lastname', 'cf', 'p_iva', 'ragione_sociale', 'email', 'phone',
                 'number', 'delegated_firstname', 'delegated_lastname', 'message', 'date', 'duration',
@@ -156,6 +156,47 @@ class ReservationPermissionsTest extends TestCase
     public function test_invalid_bearer_token_is_rejected(): void
     {
         $this->withToken('invalid-token')->getJson('/api/v1/reservations')->assertUnauthorized();
+    }
+
+    public static function sidebarGrants(): array
+    {
+        return [
+            'all actions' => [true, false],
+            'direct read only' => [false, true],
+            'no access' => [false, false],
+        ];
+    }
+
+    #[DataProvider('sidebarGrants')]
+    public function test_login_and_refresh_sidebar_follow_reservation_grants(bool $roleAccess, bool $directRead): void
+    {
+        $role = Role::findByName('standard', 'api');
+        if (!$roleAccess) {
+            $role->syncPermissions([]);
+        }
+        $user = User::findOrFail(1);
+        $user->update(['password' => 'test-password', 'status' => 1]);
+        $user->assignRole($role);
+        if ($directRead) {
+            $user->givePermissionTo('allReservation');
+        }
+
+        $login = $this->postJson('/api/v1/auth/login', [
+            'userName' => 'operator', 'password' => 'test-password',
+        ])->assertOk();
+        Auth::forgetGuards();
+        $refresh = $this->postJson('/api/v1/auth/refresh', [
+            'refreshToken' => $login->json('refreshToken'),
+        ])->assertOk();
+
+        foreach ([$login, $refresh] as $response) {
+            $sidebar = array_column($response->json('sidebar'), 'access', 'routeName');
+            $this->assertTrue($sidebar['events']);
+            $this->assertFalse($sidebar['users']);
+            foreach (self::actions() as [$action]) {
+                $this->assertSame($roleAccess || ($directRead && $action === 'allReservation'), $sidebar[$action]);
+            }
+        }
     }
 
     public function test_sql_is_repeatable_preserves_other_grants_and_respects_guards(): void

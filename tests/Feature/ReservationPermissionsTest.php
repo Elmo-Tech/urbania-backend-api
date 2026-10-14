@@ -168,7 +168,7 @@ class ReservationPermissionsTest extends TestCase
     }
 
     #[DataProvider('sidebarGrants')]
-    public function test_login_and_refresh_sidebar_follow_reservation_grants(bool $roleAccess, bool $directRead): void
+    public function test_login_and_refresh_sidebar_and_permissions_follow_reservation_grants(bool $roleAccess, bool $directRead): void
     {
         $role = Role::findByName('standard', 'api');
         if (!$roleAccess) {
@@ -195,8 +195,13 @@ class ReservationPermissionsTest extends TestCase
             $this->assertFalse($sidebar['users']);
             $this->assertSame($roleAccess || $directRead, $sidebar['reservations']);
             $this->assertCount(10, $response->json('sidebar'));
+            $permissions = $response->json('permissions.reservations');
+            $this->assertIsArray($permissions);
+            $this->assertCount(5, $permissions);
+            $permissions = array_column($permissions, 'access', 'permissionName');
             foreach (self::actions() as [$action]) {
                 $this->assertArrayNotHasKey($action, $sidebar);
+                $this->assertSame($roleAccess || ($directRead && $action === 'allReservation'), $permissions[$action]);
             }
         }
     }

@@ -201,6 +201,9 @@ class UserPermissionService
             'dashboard' => $this->dashboard,
             'email' => $this->email,
             'events' => $this->event,
+            'reservations' => $this->generateResourcePermissions($user, [
+                'allReservation', 'createReservation', 'editReservation', 'updateReservation', 'deleteReservation',
+            ]),
             'contractEconomica' => $this->contractEconomica,
             'lavorazione' => $this->lavorazione,
             'tecnica' => $this->tecnica,

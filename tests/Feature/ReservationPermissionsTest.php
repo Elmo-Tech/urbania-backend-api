@@ -193,8 +193,10 @@ class ReservationPermissionsTest extends TestCase
             $sidebar = array_column($response->json('sidebar'), 'access', 'routeName');
             $this->assertTrue($sidebar['events']);
             $this->assertFalse($sidebar['users']);
+            $this->assertSame($roleAccess || $directRead, $sidebar['reservations']);
+            $this->assertCount(10, $response->json('sidebar'));
             foreach (self::actions() as [$action]) {
-                $this->assertSame($roleAccess || ($directRead && $action === 'allReservation'), $sidebar[$action]);
+                $this->assertArrayNotHasKey($action, $sidebar);
             }
         }
     }

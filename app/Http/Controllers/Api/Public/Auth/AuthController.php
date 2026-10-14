@@ -255,12 +255,10 @@ class AuthController extends Controller
             ];
         }
 
-        foreach (['allReservation', 'createReservation', 'editReservation', 'updateReservation', 'deleteReservation'] as $permission) {
-            $sidebar[] = [
-                'routeName' => $permission,
-                'access' => $user->can($permission),
-            ];
-        }
+        $sidebar[] = [
+            'routeName' => 'reservations',
+            'access' => $user->can('allReservation'),
+        ];
 
         return [
             'token' => $token,

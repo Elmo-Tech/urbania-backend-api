@@ -61,6 +61,7 @@ class OuterTicketController extends Controller
 
             if($clientOuterTicket->accept_status === 1 && $clientOuterTicket->wasChanged('accept_status')){
                 $ticket = Ticket::create([
+                    'privacy_accept' => (int) $clientOuterTicket->privacy_accept,
                     'client_id' => $clientOuterTicket->client_id,
                     'contract_id' => $clientOuterTicket->contract_id,
                     'contract_id_2' => $clientOuterTicket->contract_two_id,
@@ -105,6 +106,7 @@ class OuterTicketController extends Controller
             DB::commit();
             return response()->json([
                 'message' => 'clientOuterTicket has been updated !',
+                'privacyAccept' => (int) $clientOuterTicket->privacy_accept,
             ]);
         }catch (\Exception $e) {
             DB::rollBack();

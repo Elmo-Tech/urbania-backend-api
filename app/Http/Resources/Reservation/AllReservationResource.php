@@ -17,6 +17,7 @@ class AllReservationResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            'privacyAccept' => (int) ($this->privacy_accept ?? 0),
             'reservationId' => $this->id,
             'firstname' => $this->firstname,
             'lastname' => $this->lastname,

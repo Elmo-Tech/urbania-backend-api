@@ -24,6 +24,7 @@ class CreateTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'clientId'=> 'required',
             'contractId'=> 'required',
             'serviceId'=> 'required',

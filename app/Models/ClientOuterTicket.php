@@ -15,10 +15,12 @@ class ClientOuterTicket extends Model
     ];
 
     protected $casts = [
+        'privacy_accept' => 'integer',
         'accept_status' => 'integer',
     ];
 
     protected $fillable = [
+        'privacy_accept',
         'firstname',
         'lastname',
         'cf',

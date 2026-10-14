@@ -70,7 +70,8 @@ class EventCalenderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'event has been created!'
+                'message' => 'event has been created!',
+                'privacyAccept' => (int) $newEvent->privacy_accept,
             ], 200);
     
 
@@ -124,7 +125,8 @@ class EventCalenderController extends Controller
             DB::commit();
 
             return response()->json([
-                'message' => 'event has been updated!'
+                'message' => 'event has been updated!',
+                'privacyAccept' => (int) $event->privacy_accept,
             ], 200);
     
 

@@ -16,7 +16,10 @@ class Ticket extends Model
     use SoftDeletes;
     use CreatedUpdatedBy;
 
+    protected $casts = ['privacy_accept' => 'integer'];
+
     protected $fillable = [
+        'privacy_accept',
         'client_id',
         'contract_id',
         'contract_id_2',

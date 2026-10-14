@@ -17,6 +17,8 @@ class ReservationResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            // AI endpoints retain their existing response contract.
+            'privacyAccept' => $this->when(! $request->is('api/v1/ai-client-reservations/*'), (int) ($this->privacy_accept ?? 0)),
             'reservationId' => $this->id,
             'firstname' => $this->firstname,
             'lastname' => $this->lastname,

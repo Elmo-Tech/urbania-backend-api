@@ -48,7 +48,7 @@ class TicketService{
         
 
        $allTickets = DB::table('tickets')
-            ->select('tickets.id', 'tickets.ticket_number', 'tickets.created_at', 'tickets.updated_at','tickets.end_date', 'tickets.status', 'tickets.anno', 'tickets.updated_by', 'clients.company_name', 'ticket_clients.firstname as nFirstname', 'ticket_clients.lastname as nLastname', 'ticket_clients.company_name as tickeClientCompany', 'services.parameter_value as service_name', 'companies.parameter_value as firm_company_name', 'workers.lastname', 'workers.firstname', 'workers.username','closers.lastname as cLastname', 'closers.firstname as cFirstname', 'closers.username as cUsername',/*'updaters.lastname as uLastname', 'updaters.firstname as uFirstname', 'updaters.username as uUsername',*/ 'tipologiaIstanza.parameter_value as tipologiaIstanzaValue' , 'segnalazione.parameter_value as segnalazioneValue', DB::raw('(SELECT parameter_values.parameter_value FROM parameter_values WHERE parameter_values.description = tickets.urgenza AND parameter_values.deleted_at is null AND parameter_values.parameter_id = 17 LIMIT 1) AS urgenzaValue'))
+            ->select('tickets.privacy_accept', 'tickets.id', 'tickets.ticket_number', 'tickets.created_at', 'tickets.updated_at','tickets.end_date', 'tickets.status', 'tickets.anno', 'tickets.updated_by', 'clients.company_name', 'ticket_clients.firstname as nFirstname', 'ticket_clients.lastname as nLastname', 'ticket_clients.company_name as tickeClientCompany', 'services.parameter_value as service_name', 'companies.parameter_value as firm_company_name', 'workers.lastname', 'workers.firstname', 'workers.username','closers.lastname as cLastname', 'closers.firstname as cFirstname', 'closers.username as cUsername',/*'updaters.lastname as uLastname', 'updaters.firstname as uFirstname', 'updaters.username as uUsername',*/ 'tipologiaIstanza.parameter_value as tipologiaIstanzaValue' , 'segnalazione.parameter_value as segnalazioneValue', DB::raw('(SELECT parameter_values.parameter_value FROM parameter_values WHERE parameter_values.description = tickets.urgenza AND parameter_values.deleted_at is null AND parameter_values.parameter_id = 17 LIMIT 1) AS urgenzaValue'))
             ->leftJoin('parameter_values as services', 'services.id', '=', 'tickets.service_id')
             ->leftJoin('clients', 'clients.id', '=', 'tickets.client_id')
             ->leftJoin('ticket_clients', 'ticket_clients.id', '=', 'tickets.ticket_client_id')
@@ -185,6 +185,7 @@ class TicketService{
         }
 
         $ticket = Ticket::create([
+            'privacy_accept' => (int) ($ticketData['privacyAccept'] ?? 0),
             'client_id'=> $ticketData['clientId'],
             'contract_id'=> $contract[0],
             'contract_id_2' =>$contract[1],
@@ -289,6 +290,9 @@ class TicketService{
             $ticket->closer_id = Auth::id();
         }
 
+        if (array_key_exists('privacyAccept', $ticketData)) {
+            $ticket->privacy_accept = (int) $ticketData['privacyAccept'];
+        }
         $ticket->client_id = $ticketData['clientId'];
         $ticket->contract_id = $contract[0];
         $ticket->contract_id_2 = $contract[1];
@@ -314,7 +318,8 @@ class TicketService{
         $ticket->save();
 
         return response()->json([
-            'message' => 'ticket main info has been updated!'
+            'message' => 'ticket main info has been updated!',
+            'privacyAccept' => (int) $ticket->privacy_accept,
         ], 200);
 
     }

@@ -24,6 +24,7 @@ class UpdateTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'ticketId'=> 'required',
             'clientId'=> 'required',
             'contractId'=> 'required',

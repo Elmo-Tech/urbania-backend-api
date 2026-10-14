@@ -57,6 +57,7 @@ class CustomerReservationController extends Controller
 
             return response()->json([
                 'message' => 'schedule has been updated !',
+                'privacyAccept' => (int) $reservation->privacy_accept,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -101,6 +102,7 @@ class CustomerReservationController extends Controller
 
             return response()->json([
                 'message' => 'schedule has been updated !',
+                'privacyAccept' => (int) $reservation->privacy_accept,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

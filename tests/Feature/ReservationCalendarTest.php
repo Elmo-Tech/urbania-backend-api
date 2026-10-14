@@ -46,8 +46,11 @@ class ReservationCalendarTest extends TestCase
             'events' => ['title', 'description', 'start_date', 'end_date', 'url', 'all_day', 'group_id',
                 'client_id', 'ticket_client_id'],
         ] as $name => $columns) {
-            Schema::create($name, function (Blueprint $table) use ($columns) {
+            Schema::create($name, function (Blueprint $table) use ($name, $columns) {
                 $table->id();
+                if (in_array($name, ['reservations', 'events', 'tickets'], true)) {
+                    $table->tinyInteger('privacy_accept')->default(0);
+                }
                 foreach ($columns as $column) {
                     $table->text($column)->nullable();
                 }
@@ -64,6 +67,76 @@ class ReservationCalendarTest extends TestCase
     private function migration()
     {
         return require database_path('migrations/2026_09_28_130000_add_reservation_id_to_events.php');
+    }
+
+    public function test_privacy_passes_from_customer_booking_to_calendar_and_supports_edits(): void
+    {
+        $data = ['firstname' => 'Mario', 'lastname' => 'Rossi', 'email' => 'customer@example.test',
+            'phone' => '123456', 'date' => '2026-11-26 09:00:00', 'duration' => 30, 'status' => 1, 'clientId' => 1];
+        $created = $this->postJson('/api/v1/client-reservations/create', $data + ['privacyAccept' => 1])
+            ->assertOk()->assertJsonPath('data.privacyAccept', 1);
+        $id = $created->json('data.reservationId');
+        $this->putJson('/api/v1/client-reservations/update', $data + ['reservationId' => $id])
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->putJson('/api/v1/client-reservations/update', $data + ['reservationId' => $id, 'privacyAccept' => 0])
+            ->assertOk()->assertJsonPath('privacyAccept', 0);
+        $reservation = Reservation::findOrFail($id);
+        $this->adminUpdate($reservation, ['privacyAccept' => 1])->assertOk()->assertJsonPath('privacyAccept', 1);
+        $event = Event::sole();
+        $this->assertSame(1, $event->privacy_accept);
+        $this->assertSame(1, $reservation->fresh()->privacy_accept);
+        $this->getJson('/api/v1/events')->assertOk()->assertJsonPath('0.privacyAccept', 1);
+        $this->getJson('/api/v1/events/edit?eventId='.$event->id)->assertOk()->assertJsonPath('privacyAccept', 1);
+
+        $eventData = ['eventId' => $event->id, 'title' => 'Updated appointment', 'description' => '',
+            'startDate' => $event->start_date, 'endDate' => $event->end_date, 'url' => '', 'allDay' => 0,
+            'clientId' => 1, 'groupId' => null, 'ticketClientId' => '0'];
+        $this->putJson('/api/v1/events/update', $eventData)->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->putJson('/api/v1/events/update', $eventData + ['privacyAccept' => 0])
+            ->assertOk()->assertJsonPath('privacyAccept', 0);
+        $this->assertSame(0, $event->fresh()->privacy_accept);
+    }
+
+    public function test_ai_reservation_contract_is_unchanged_and_ignores_privacy_input(): void
+    {
+        Schema::create('parameter_values', function (Blueprint $table) {
+            $table->id();
+            $table->string('parameter_value');
+            $table->softDeletes();
+        });
+        $data = ['clientName' => 'Urbania', 'parameterName' => '', 'status' => 1,
+            'firstname' => 'Mario', 'lastname' => 'Rossi', 'email' => 'customer@example.test',
+            'phone' => '123456', 'date' => '2026-11-26 09:00:00', 'duration' => 30];
+        $created = $this->postJson('/api/v1/ai-client-reservations/create', $data + ['privacyAccept' => 1])
+            ->assertOk()->assertJsonMissingPath('data.privacyAccept');
+        $data['reservationId'] = $created->json('data.reservationId');
+        $reservation = Reservation::findOrFail($data['reservationId']);
+        $this->assertSame(0, $reservation->privacy_accept);
+        $this->putJson('/api/v1/ai-client-reservations/update', $data + ['privacyAccept' => 1])
+            ->assertOk()->assertExactJson(['message' => 'schedule has been updated !']);
+        $this->assertSame(0, $reservation->fresh()->privacy_accept);
+        $reservation->update(['privacy_accept' => 1]);
+        $this->putJson('/api/v1/ai-client-reservations/update', $data)
+            ->assertOk()->assertExactJson(['message' => 'schedule has been updated !']);
+        $this->assertSame(1, $reservation->fresh()->privacy_accept);
+        $this->putJson('/api/v1/ai-client-reservations/update', $data + ['privacyAccept' => 0])
+            ->assertOk()->assertExactJson(['message' => 'schedule has been updated !']);
+        $this->assertSame(1, $reservation->fresh()->privacy_accept);
+    }
+
+    public function test_new_event_privacy_and_invalid_booking_input(): void
+    {
+        $this->actingAs((new User)->forceFill(['id' => 1]), 'api');
+        $data = ['title' => 'Appointment', 'description' => '', 'startDate' => '2026-11-26 09:00:00',
+            'endDate' => '2026-11-26 10:00:00', 'url' => '', 'allDay' => 0,
+            'clientId' => 1, 'groupId' => null, 'ticketClientId' => '0'];
+        $this->postJson('/api/v1/events/create', $data + ['privacyAccept' => 1])
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->assertSame(1, Event::sole()->privacy_accept);
+        $this->postJson('/api/v1/client-reservations/create', [
+            'clientId' => 1, 'status' => 1, 'date' => '2026-11-26 09:00:00', 'privacyAccept' => null,
+        ])->assertStatus(401)->assertJsonStructure(['message' => ['privacyAccept']]);
+        $this->assertSame(0, Reservation::count());
     }
 
     private function reservation(int $status = 2): Reservation

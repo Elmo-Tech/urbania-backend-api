@@ -15,6 +15,7 @@ class EventResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
+            'privacyAccept' => (int) ($this->privacy_accept ?? 0),
             "eventId" => $this->id,
             "title" => $this->title,
             "description" => $this->description?$this->description:"",

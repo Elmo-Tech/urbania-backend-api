@@ -22,6 +22,7 @@ class ReservationService{
         $confirmationToken = $reservationData['status'] == 2? bin2hex(random_bytes(16)):null;
 
         $reservation = Reservation::create([
+            'privacy_accept' => (int) ($reservationData['privacyAccept'] ?? 0),
             "firstname" => $reservationData['firstname']??'',
             "lastname" => $reservationData['lastname']??'',
             "cf" => $reservationData['cf']??'',
@@ -67,6 +68,7 @@ class ReservationService{
             ? ($reservation->confirmation_token ?: bin2hex(random_bytes(16))) : null;
 
         $reservation->fill([
+            'privacy_accept' => (int) ($reservationData['privacyAccept'] ?? $reservation->privacy_accept),
             "firstname" => $reservationData['firstname']??'',
             "lastname" => $reservationData['lastname']??'',
             "cf" => $reservationData['cf']??'',

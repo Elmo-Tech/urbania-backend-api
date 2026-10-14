@@ -11,7 +11,10 @@ class Event extends Model
 {
     protected $table = 'events';
 
+    protected $casts = ['privacy_accept' => 'integer'];
+
     protected $fillable = [
+        'privacy_accept',
         'title',
         'description',
         'start_date',

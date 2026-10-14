@@ -35,6 +35,7 @@ class OuterTicketDecisionTest extends TestCase
         // Isolate this workflow from unrelated legacy migrations and real application data.
         Schema::create('client_outer_tickets', function (Blueprint $table) {
             $table->id();
+            $table->tinyInteger('privacy_accept')->default(0);
             $table->boolean('accept_status')->nullable();
             foreach (['number', 'firstname', 'lastname', 'cf', 'p_iva', 'ragione_sociale', 'email', 'phone',
                 'address', 'city', 'state', 'delegated_firstname', 'delegated_lastname', 'delegated_phone',
@@ -58,8 +59,11 @@ class OuterTicketDecisionTest extends TestCase
                 'esito', 'note', 'status_date', 'anno', 'tipologia_istanza', 'segnalazione', 'urgenza', 'email_token'],
         ];
         foreach ($tables as $name => $columns) {
-            Schema::create($name, function (Blueprint $table) use ($columns) {
+            Schema::create($name, function (Blueprint $table) use ($name, $columns) {
                 $table->id();
+                if (in_array($name, ['reservations', 'events', 'tickets'], true)) {
+                    $table->tinyInteger('privacy_accept')->default(0);
+                }
                 foreach ($columns as $column) {
                     $table->text($column)->nullable();
                 }
@@ -74,6 +78,61 @@ class OuterTicketDecisionTest extends TestCase
     private function migration()
     {
         return require database_path('migrations/2026_09_28_120000_add_rejection_reason_to_client_outer_tickets.php');
+    }
+
+    public function test_privacy_is_saved_displayed_updated_and_copied_on_acceptance(): void
+    {
+        $created = $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'privacyAccept' => 1,
+        ])->assertOk()->assertJsonPath('privacyAccept', 1);
+        $ticket = ClientOuterTicket::findOrFail($created->json('clientOuterTicketId'));
+        $this->assertSame(1, $ticket->privacy_accept);
+        $this->getJson('/api/v1/outer-tickets')->assertOk()
+            ->assertJsonPath('clientOuterTickets.0.privacyAccept', 1);
+        $this->getJson('/api/v1/outer-tickets/edit?clientOuterTicketId='.$ticket->id)
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($ticket))
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($ticket) + ['privacyAccept' => 0])
+            ->assertOk()->assertJsonPath('privacyAccept', 0);
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($ticket) + [
+            'privacyAccept' => 1, 'acceptStatus' => 1,
+        ])->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->assertSame(1, (int) DB::table('tickets')->value('privacy_accept'));
+        $this->assertSame(1, $ticket->fresh()->privacy_accept);
+    }
+
+    public function test_missing_privacy_defaults_to_zero_and_rejection_can_update_it(): void
+    {
+        $created = $this->postJson('/api/v1/client-outer-tickets/create', ['clientId' => 1, 'status' => 0])
+            ->assertOk()->assertJsonPath('privacyAccept', 0);
+        $id = $created->json('clientOuterTicketId');
+        $this->assertSame(0, ClientOuterTicket::findOrFail($id)->privacy_accept);
+        $this->putJson('/api/v1/outer-tickets/update', [
+            'clientOuterTicketId' => $id, 'acceptStatus' => 2, 'rejectionReason' => 'Missing data',
+            'email' => 'customer@example.test', 'privacyAccept' => 1,
+        ])->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->assertSame(1, ClientOuterTicket::findOrFail($id)->privacy_accept);
+    }
+
+    public function test_ai_ticket_contract_is_unchanged_and_public_input_is_validated(): void
+    {
+        Schema::table('clients', fn (Blueprint $table) => $table->integer('urbania_client')->default(1));
+        Schema::create('parameter_values', function (Blueprint $table) {
+            $table->id();
+            $table->string('parameter_value');
+            $table->softDeletes();
+        });
+        DB::table('clients')->insert(['id' => 1, 'company_name' => 'Test municipality']);
+        $this->postJson('/api/v1/ai-client-outer-tickets/create', [
+            'clientName' => 'Test municipality', 'status' => 0, 'privacyAccept' => 1,
+            'serviceName' => '', 'istanzaParameterName' => '', 'delegatedRoleName' => '',
+        ])->assertOk()->assertExactJson(['message' => 'ticket has been created !']);
+        $this->assertSame(0, ClientOuterTicket::sole()->privacy_accept);
+        $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'privacyAccept' => 2,
+        ])->assertStatus(401)->assertJsonStructure(['message' => ['privacyAccept']]);
+        $this->assertSame(1, ClientOuterTicket::count());
     }
 
     private function ticket(?int $decision = 0): ClientOuterTicket

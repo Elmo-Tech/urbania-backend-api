@@ -40,6 +40,7 @@ class EventService{
         
 
         $newEvent = Event::create([
+            'privacy_accept' => (int) ($eventData['privacyAccept'] ?? 0),
             "title" => $client->firstname? $client->firstname . ' ' . $client->lastname . ' | ' .  $eventData['title'] : $client->company_name . ' | ' .  $eventData['title'],
             "description" => $eventData['description'],
             "start_date" => $eventData['startDate'],
@@ -70,6 +71,7 @@ class EventService{
         $client = Client::find($eventData['clientId']);
 
         $event->fill([
+            'privacy_accept' => (int) ($eventData['privacyAccept'] ?? $event->privacy_accept),
             "title" => $client->firstname? $client->firstname . ' ' . $client->lastname . ' | ' .  $eventData['title'] : $client->company_name . ' | ' .  $eventData['title'],
             "description" => $eventData['description'],
             "start_date" => $eventData['startDate'],

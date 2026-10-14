@@ -24,6 +24,7 @@ class TicketResource extends JsonResource
             $remainingDays = $afterNotifyDate->diffInDays($nowDate);
         }
         return [
+            'privacyAccept' => (int) ($this->privacy_accept ?? 0),
             'ticketId' => $this->id,
             'ticketNumber' => $this->ticket_number,
             'statusDate' => date("Y-m-d", strtotime($this->updated_at)),

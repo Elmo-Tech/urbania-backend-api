@@ -12,7 +12,10 @@ class Reservation extends Model
 {
     use HasFactory, SoftDeletes;
 
+    protected $casts = ['privacy_accept' => 'integer'];
+
     protected $fillable = [
+        'privacy_accept',
         'firstname',
         'lastname',
         'cf',

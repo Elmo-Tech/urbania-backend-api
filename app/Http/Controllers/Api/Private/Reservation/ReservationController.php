@@ -52,13 +52,14 @@ class ReservationController extends Controller
             DB::beginTransaction();
 
 
-            $this->reservationService->createReservation($createReservationRequest->validated());
+            $reservation = $this->reservationService->createReservation($createReservationRequest->validated());
 
 
             DB::commit();
 
             return response()->json([
                 'message' => 'schedule has been created !',
+                'privacyAccept' => (int) $reservation->privacy_accept,
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -98,6 +99,7 @@ class ReservationController extends Controller
             DB::commit();
             return response()->json([
                 'message' => 'reservation has been updated !',
+                'privacyAccept' => (int) $reservation->privacy_accept,
             ]);
         }catch (\Exception $e) {
             DB::rollBack();

@@ -50,6 +50,7 @@ class ClientOuterTicketController extends Controller
             return response()->json([
                 'message' => 'ticket has been created !',
                 'clientOuterTicketId' => $clientOuterTicket->id,
+                'privacyAccept' => (int) $clientOuterTicket->privacy_accept,
             ], 200);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -106,6 +107,9 @@ class ClientOuterTicketController extends Controller
                     $ticket->status_date = now();
                     $ticket->end_date = null;
                 }
+                if (array_key_exists('privacyAccept', $data)) {
+                    $ticket->privacy_accept = (int) $data['privacyAccept'];
+                }
                 $ticket->save();
 
                 foreach ($data['files'] ?? [] as $file) {
@@ -120,6 +124,7 @@ class ClientOuterTicketController extends Controller
                 return response()->json([
                     'message' => 'ticket has been updated !',
                     'status' => (int) $ticket->status,
+                    'privacyAccept' => (int) $ticket->privacy_accept,
                 ], 200);
             });
         } catch (\Throwable $e) {

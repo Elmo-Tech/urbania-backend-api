@@ -41,7 +41,8 @@ class TicketController extends Controller
         DB::commit();
 
         return response()->json([
-            'message' => 'ticket has been created!'
+            'message' => 'ticket has been created!',
+            'privacyAccept' => (int) $ticket->privacy_accept,
         ], 200);
 
         } catch (\Exception $e) {

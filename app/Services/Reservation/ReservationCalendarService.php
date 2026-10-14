@@ -71,6 +71,7 @@ class ReservationCalendarService
     public function syncConfirmation(Reservation $reservation, ?Event $event): void
     {
         $data = [
+            'privacyAccept' => (int) $reservation->privacy_accept,
             'title' => $this->title($reservation),
             'description' => $reservation->message,
             'startDate' => $reservation->date,

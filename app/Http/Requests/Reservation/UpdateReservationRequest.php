@@ -24,6 +24,7 @@ class UpdateReservationRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'reservationId' => 'required',
             'firstname' => 'required',
             'lastname' => 'required',

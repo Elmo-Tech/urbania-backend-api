@@ -24,6 +24,7 @@ class UpdateClientOuterTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'clientOuterTicketId' => 'required|integer',
             'firstname' => 'required_unless:acceptStatus,2',
             'lastname' => 'required_unless:acceptStatus,2',

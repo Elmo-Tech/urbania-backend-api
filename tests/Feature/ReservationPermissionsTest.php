@@ -42,8 +42,11 @@ class ReservationPermissionsTest extends TestCase
                 'number', 'delegated_firstname', 'delegated_lastname', 'message', 'date', 'duration',
                 'status', 'parameter_id', 'client_id', 'refuse_reason', 'confirmation_token'],
         ] as $name => $columns) {
-            Schema::create($name, function (Blueprint $table) use ($columns) {
+            Schema::create($name, function (Blueprint $table) use ($name, $columns) {
                 $table->id();
+                if (in_array($name, ['reservations', 'events', 'tickets'], true)) {
+                    $table->tinyInteger('privacy_accept')->default(0);
+                }
                 foreach ($columns as $column) {
                     $table->text($column)->nullable();
                 }
@@ -62,6 +65,18 @@ class ReservationPermissionsTest extends TestCase
         // Only transaction syntax differs; execute the delivered inserts unchanged.
         DB::unprepared(str_replace('START TRANSACTION;', 'BEGIN TRANSACTION;', $sql));
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    public function test_admin_reservation_list_and_edit_return_privacy_as_integer(): void
+    {
+        $user = User::findOrFail(1);
+        $user->assignRole('standard');
+        $this->actingAs($user, 'api');
+        $this->getJson('/api/v1/reservations')->assertOk()->assertJsonPath('reservations.0.privacyAccept', 0);
+        $this->postJson('/api/v1/reservations/create', $this->payload() + ['privacyAccept' => 1])
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->getJson('/api/v1/reservations/edit?reservationId=2')->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->getJson('/api/v1/reservations')->assertOk()->assertJsonPath('reservations.1.privacyAccept', 1);
     }
 
     private function payload(): array

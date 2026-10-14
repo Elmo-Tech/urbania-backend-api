@@ -34,6 +34,7 @@ class SollecitoTest extends TestCase
         Schema::create('tickets', function (Blueprint $table) {
             $table->id();
             $table->integer('status');
+            $table->tinyInteger('privacy_accept')->default(0);
             foreach (['description', 'email_token', 'ticket_number', 'segnalazione', 'urgenza',
                 'notify_date', 'end_date', 'worker_id', 'connect_type_id', 'client_id', 'ticket_client_id',
                 'contract_id', 'contract_id_2', 'service_id', 'esito', 'note', 'status_date', 'anno',
@@ -71,6 +72,36 @@ class SollecitoTest extends TestCase
             'path' => UploadedFile::fake()->createWithContent($name, 'Attachment '.$name)->mimeType($mime),
             'actionStatus' => 'create',
         ];
+    }
+
+    public function test_privacy_can_be_updated_by_customer_and_internal_ticket_forms_and_is_listed(): void
+    {
+        Schema::table('tickets', fn (Blueprint $table) => $table->integer('closer_id')->nullable());
+        foreach (['clients' => ['company_name'], 'ticket_clients' => ['firstname', 'lastname', 'company_name'],
+            'users' => ['firstname', 'lastname', 'username'], 'contracts' => ['company_id']] as $name => $columns) {
+            Schema::create($name, function (Blueprint $table) use ($columns) {
+                $table->id();
+                foreach ($columns as $column) {
+                    $table->text($column)->nullable();
+                }
+            });
+        }
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->send(['privacyAccept' => '1'])->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->send()->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->getJson('/api/v1/tickets')->assertOk()->assertJsonPath('ticketPage.tickets.0.privacyAccept', 1);
+        $this->getJson('/api/v1/tickets/edit?ticketId=3235')->assertOk()->assertJsonPath('privacyAccept', 1);
+        $payload = ['ticketId' => 3235, 'ticketClientId' => '0', 'clientId' => 1,
+            'contractId' => '18##16', 'serviceId' => 27, 'workerId' => '', 'notifyDate' => null,
+            'status' => 1, 'description' => 'Updated', 'connectTypeId' => null, 'note' => null,
+            'anno' => ['2020'], 'urgenza' => 92];
+        $this->putJson('/api/v1/tickets/update', $payload)->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->putJson('/api/v1/tickets/update', $payload + ['privacyAccept' => 0])
+            ->assertOk()->assertJsonPath('privacyAccept', 0);
+        $this->assertSame(0, Ticket::findOrFail(3235)->privacy_accept);
+        $this->postJson('/api/v1/tickets/create', $payload + ['privacyAccept' => 1])
+            ->assertOk()->assertJsonPath('privacyAccept', 1);
+        $this->assertSame(1, Ticket::orderByDesc('id')->first()->privacy_accept);
     }
 
     private function send(array $overrides = [])

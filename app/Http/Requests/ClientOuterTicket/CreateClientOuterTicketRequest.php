@@ -24,6 +24,7 @@ class CreateClientOuterTicketRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'firstname' => 'nullable|string|max:255',
             'lastname' => 'nullable|string|max:255',
             'cf' => 'nullable|string|max:20',

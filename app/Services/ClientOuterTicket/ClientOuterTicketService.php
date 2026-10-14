@@ -52,6 +52,7 @@ class ClientOuterTicketService{
         $state = $clientOuterTicketData['stats'] ?? $clientOuterTicketData['state'] ?? null;
 
         $clientOuterTicket = ClientOuterTicket::create([
+            'privacy_accept' => (int) ($clientOuterTicketData['privacyAccept'] ?? 0),
             "firstname" => $clientOuterTicketData['firstname']??'',
             "lastname" => $clientOuterTicketData['lastname']??'',
             "cf" => $clientOuterTicketData['cf']??'',
@@ -91,6 +92,10 @@ class ClientOuterTicketService{
     public function updateClientOuterTicket(array $clientOuterTicketData): mixed{
 
         $clientOuterTicket = ClientOuterTicket::lockForUpdate()->findOrFail($clientOuterTicketData['clientOuterTicketId']);
+
+        if (array_key_exists('privacyAccept', $clientOuterTicketData)) {
+            $clientOuterTicket->privacy_accept = (int) $clientOuterTicketData['privacyAccept'];
+        }
 
         if ((int) ($clientOuterTicketData['acceptStatus'] ?? -1) === 2) {
             $email = $clientOuterTicketData['email'] ?? $clientOuterTicket->email;

@@ -15,6 +15,7 @@ class SollecitoRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'privacyAccept' => 'sometimes|required|integer|in:0,1',
             'ticketId' => 'required|integer|min:1',
             'token' => 'required|string|max:255',
             'sollecito' => 'sometimes|boolean',

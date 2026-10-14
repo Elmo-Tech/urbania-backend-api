@@ -26,6 +26,7 @@ class AllTicketResource extends JsonResource
             $remainingDays = $afterNotifyDate->diffInDays($nowDate);
         }*/
         return [
+            'privacyAccept' => (int) ($this->privacy_accept ?? 0),
             'ticketId' => $this->id,
             'ticketNumber' => $this->ticket_number,
             'clientName' => $this->company_name?$this->company_name:"",

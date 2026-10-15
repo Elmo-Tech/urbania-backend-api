@@ -228,6 +228,10 @@ class ReservationCalendarTest extends TestCase
         $this->assertSame('2026-10-06 11:00:00', $event->fresh()->start_date);
         $this->assertSame($token, $reservation->fresh()->confirmation_token);
         Mail::assertSent(ConfirmReservation::class, 3);
+        $this->getJson('/api/v1/events/edit?eventId='.$event->id)->assertOk()
+            ->assertJsonMissingPath('reservationId')->assertJsonMissingPath('reservation_id');
+        $this->getJson('/api/v1/events')->assertOk()
+            ->assertJsonMissingPath('0.reservationId')->assertJsonMissingPath('0.reservation_id');
     }
 
     public function test_admin_rejection_removes_event_and_reacceptance_reuses_it(): void

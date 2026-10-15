@@ -60,42 +60,51 @@ class OuterTicketController extends Controller
             $clientOuterTicket = $this->clientOuterTicketService->updateClientOuterTicket($updateClientOuterTicketRequest->validated());
 
             if($clientOuterTicket->accept_status === 1 && $clientOuterTicket->wasChanged('accept_status')){
-                $ticket = Ticket::create([
-                    'privacy_accept' => (int) $clientOuterTicket->privacy_accept,
-                    'client_id' => $clientOuterTicket->client_id,
-                    'contract_id' => $clientOuterTicket->contract_id,
-                    'contract_id_2' => $clientOuterTicket->contract_two_id,
-                    'service_id' => $clientOuterTicket->service_id,
-                    'worker_id' => $clientOuterTicket->worker_id,//
-                    'ticket_client_id' => $clientOuterTicket->ticket_client_id,
-                    'ticket_number' => "",//
-                    'notify_date' => $clientOuterTicket->notify_date,
-                    //'after_notify_date' => $clientOuterTicket->after_notify_date,
-                    'status' => 1,
-                    'closer_id' => null,
-                    'end_date' => null,
-                    'connect_type_id' => $clientOuterTicket->connect_type_id,
-                    'description' => $clientOuterTicket->message,
-                    'esito' => $clientOuterTicket->esito,
-                    'note' => $clientOuterTicket->note,
-                    'status_date' => now(),
-                    'anno' => $clientOuterTicket->anno,
-                    'tipologia_istanza' => $clientOuterTicket->istanza_parameter_id,
-                    'segnalazione' => $clientOuterTicket->segnalazione,
-                    'urgenza' => $clientOuterTicket->urgenza
-                ]);
-                $ticket->email_token = bin2hex(random_bytes(16));
-                $ticket->save();
+                $ticket = Ticket::withTrashed()->where('client_outer_ticket_id', $clientOuterTicket->id)
+                    ->lockForUpdate()->first();
+                abort_if($ticket && $ticket->trashed(), 409, 'The linked internal ticket has been deleted.');
 
-                $this->uploadService->copyFiles(
-                    'outertickets/' . $clientOuterTicket->id,
-                    'tickets/' . $ticket->id
-                );
+                // The outer request is locked by the service for this entire transaction.
+                // Reacceptance keeps the existing ticket, attachments and notification intact.
+                if (! $ticket) {
+                    $ticket = Ticket::create([
+                        'client_outer_ticket_id' => $clientOuterTicket->id,
+                        'privacy_accept' => (int) $clientOuterTicket->privacy_accept,
+                        'client_id' => $clientOuterTicket->client_id,
+                        'contract_id' => $clientOuterTicket->contract_id,
+                        'contract_id_2' => $clientOuterTicket->contract_two_id,
+                        'service_id' => $clientOuterTicket->service_id,
+                        'worker_id' => $clientOuterTicket->worker_id,//
+                        'ticket_client_id' => $clientOuterTicket->ticket_client_id,
+                        'ticket_number' => "",//
+                        'notify_date' => $clientOuterTicket->notify_date,
+                        //'after_notify_date' => $clientOuterTicket->after_notify_date,
+                        'status' => 1,
+                        'closer_id' => null,
+                        'end_date' => null,
+                        'connect_type_id' => $clientOuterTicket->connect_type_id,
+                        'description' => $clientOuterTicket->message,
+                        'esito' => $clientOuterTicket->esito,
+                        'note' => $clientOuterTicket->note,
+                        'status_date' => now(),
+                        'anno' => $clientOuterTicket->anno,
+                        'tipologia_istanza' => $clientOuterTicket->istanza_parameter_id,
+                        'segnalazione' => $clientOuterTicket->segnalazione,
+                        'urgenza' => $clientOuterTicket->urgenza
+                    ]);
+                    $ticket->email_token = bin2hex(random_bytes(16));
+                    $ticket->save();
 
-                $ticketClient = TicketClientContact::where('ticket_client_id', $ticket->ticket_client_id)->first();
-                
-                if($ticketClient?->email){
-                    Mail::to($ticketClient->email)->send(new OuterTicketCreated($ticket));
+                    $this->uploadService->copyFiles(
+                        'outertickets/' . $clientOuterTicket->id,
+                        'tickets/' . $ticket->id
+                    );
+
+                    $ticketClient = TicketClientContact::where('ticket_client_id', $ticket->ticket_client_id)->first();
+
+                    if($ticketClient?->email){
+                        Mail::to($ticketClient->email)->send(new OuterTicketCreated($ticket));
+                    }
                 }
             }
 

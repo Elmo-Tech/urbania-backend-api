@@ -73,6 +73,98 @@ class OuterTicketDecisionTest extends TestCase
                 $table->softDeletes();
             });
         }
+        $this->linkMigration()->up();
+    }
+
+    private function linkMigration()
+    {
+        return require database_path('migrations/2026_10_15_120000_add_client_outer_ticket_id_to_tickets.php');
+    }
+
+    public function test_reacceptance_keeps_one_linked_ticket_and_does_not_overwrite_it(): void
+    {
+        $outer = $this->ticket();
+        $clientId = DB::table('ticket_clients')->insertGetId(['national_number' => 'CLIENT123']);
+        $data = array_replace($this->fullUpdate($outer), ['acceptStatus' => 1, 'ticketClientId' => $clientId]);
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk()
+            ->assertJsonMissingPath('clientOuterTicketId')->assertJsonMissingPath('client_outer_ticket_id');
+        $internal = \App\Models\Ticket::sole();
+        $this->assertEquals($outer->id, $internal->client_outer_ticket_id);
+        $this->assertArrayNotHasKey('client_outer_ticket_id', $internal->toArray());
+        $internal->description = 'Updated internally';
+        $internal->save();
+        Storage::disk('uploads')->put('tickets/'.$internal->id.'/proof.txt', 'internal attachment');
+        $this->putJson('/api/v1/outer-tickets/update', [
+            'clientOuterTicketId' => $outer->id, 'acceptStatus' => 2, 'rejectionReason' => 'Review again',
+        ])->assertOk();
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $this->assertSame(1, \App\Models\Ticket::withTrashed()->count());
+        $this->assertSame('Updated internally', $internal->fresh()->description);
+        $this->assertSame('internal attachment', Storage::disk('uploads')->get('tickets/'.$internal->id.'/proof.txt'));
+        $this->assertSame(1, $outer->fresh()->accept_status);
+        Mail::assertSent(OuterTicketCreated::class, 1);
+        Mail::assertSent(OuterTicketRejected::class, 1);
+        Schema::create('parameter_values', function (Blueprint $table) {
+            $table->id();
+            $table->text('description')->nullable();
+            $table->integer('parameter_id')->nullable();
+            $table->softDeletes();
+        });
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $this->getJson('/api/v1/tickets/edit?ticketId='.$internal->id)->assertOk()
+            ->assertJsonMissingPath('clientOuterTicketId')->assertJsonMissingPath('client_outer_ticket_id');
+    }
+
+    public function test_reacceptance_of_a_soft_deleted_ticket_rolls_back_the_decision(): void
+    {
+        $outer = $this->ticket();
+        $data = $this->fullUpdate($outer) + ['acceptStatus' => 1];
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $internal = \App\Models\Ticket::sole();
+        $internal->delete();
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['acceptStatus' => 0])->assertOk();
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertStatus(409);
+        $this->assertSame(0, $outer->fresh()->accept_status);
+        $this->assertSame(1, \App\Models\Ticket::withTrashed()->count());
+        $this->assertTrue($internal->fresh()->trashed());
+    }
+
+    public function test_link_migration_preserves_legacy_rows_and_allows_multiple_nulls(): void
+    {
+        $this->linkMigration()->down();
+        DB::table('tickets')->insert(['id' => 1, 'description' => 'Legacy ticket']);
+        $this->linkMigration()->up();
+        DB::table('tickets')->insert(['id' => 2, 'description' => 'Internal ticket']);
+        $this->assertSame([null, null], DB::table('tickets')->orderBy('id')->pluck('client_outer_ticket_id')->all());
+        $this->linkMigration()->down();
+        $this->assertFalse(Schema::hasColumn('tickets', 'client_outer_ticket_id'));
+        $this->assertSame(2, DB::table('tickets')->count());
+    }
+
+    public function test_link_unique_index_also_protects_soft_deleted_tickets(): void
+    {
+        $outer = $this->ticket();
+        DB::table('tickets')->insert(['client_outer_ticket_id' => $outer->id, 'deleted_at' => now()]);
+        $this->expectException(\Illuminate\Database\QueryException::class);
+        DB::table('tickets')->insert(['client_outer_ticket_id' => $outer->id]);
+    }
+
+    public function test_failed_acceptance_rolls_back_link_and_can_be_retried(): void
+    {
+        $outer = $this->ticket();
+        $clientId = DB::table('ticket_clients')->insertGetId(['national_number' => 'CLIENT123']);
+        $data = array_replace($this->fullUpdate($outer), ['acceptStatus' => 1, 'ticketClientId' => $clientId]);
+        $mailFake = Mail::getFacadeRoot();
+        Mail::shouldReceive('to')->once()->andReturnSelf();
+        Mail::shouldReceive('send')->once()->andThrow(new TransportException('Provider unavailable'));
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertStatus(500);
+        $this->assertSame(0, DB::table('tickets')->count());
+        $this->assertSame(0, $outer->fresh()->accept_status);
+        Mail::swap($mailFake);
+        $this->putJson('/api/v1/outer-tickets/update', $data)->assertOk();
+        $this->assertSame(1, DB::table('tickets')->count());
+        $this->assertEquals($outer->id, DB::table('tickets')->value('client_outer_ticket_id'));
     }
 
     private function migration()
@@ -254,6 +346,7 @@ class OuterTicketDecisionTest extends TestCase
         $this->assertSame(1, $ticket->fresh()->accept_status);
         $this->assertSame(1, DB::table('tickets')->count());
         $internalId = DB::table('tickets')->value('id');
+        $this->assertEquals($ticket->id, DB::table('tickets')->value('client_outer_ticket_id'));
         $this->assertSame('document', Storage::disk('uploads')->get('tickets/'.$internalId.'/signed.p7m'));
         Mail::assertSent(OuterTicketCreated::class, fn ($mail) => $mail->hasTo('customer@example.com'));
         Mail::assertSentCount(1);

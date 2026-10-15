@@ -18,7 +18,10 @@ class Ticket extends Model
 
     protected $casts = ['privacy_accept' => 'integer'];
 
+    protected $hidden = ['client_outer_ticket_id'];
+
     protected $fillable = [
+        'client_outer_ticket_id',
         'privacy_accept',
         'client_id',
         'contract_id',

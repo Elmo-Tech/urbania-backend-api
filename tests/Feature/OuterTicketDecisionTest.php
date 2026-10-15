@@ -355,19 +355,19 @@ class OuterTicketDecisionTest extends TestCase
     public static function listFilters(): array
     {
         return [
-            ['', [0, null, 1, 2]],
-            ['?acceptStatus=', [0, null, 1, 2]],
-            ['?acceptStatus=%20%20', [0, null, 1, 2]],
+            ['', [0, null, 2]],
+            ['?acceptStatus=', [0, null, 2]],
+            ['?acceptStatus=%20%20', [0, null, 2]],
             ['?acceptStatus=0', [0, null]],
-            ['?acceptStatus=1', [1]],
+            ['?acceptStatus=1', []],
             ['?acceptStatus=2', [2]],
-            ['?acceptStatus=0,1', [0, null, 1]],
-            ['?acceptStatus=1,2', [1, 2]],
+            ['?acceptStatus=0,1', [0, null]],
+            ['?acceptStatus=1,2', [2]],
             ['?acceptStatus=0,2', [0, null, 2]],
-            ['?acceptStatus=0,1,2', [0, null, 1, 2]],
+            ['?acceptStatus=0,1,2', [0, null, 2]],
             ['?acceptStatus=2,0,2', [0, null, 2]],
-            ['?acceptStatus=0%2C%201', [0, null, 1]],
-            ['?isProcessed=1', [0, null, 1, 2]],
+            ['?acceptStatus=0%2C%201', [0, null]],
+            ['?isProcessed=1', [0, null, 2]],
             ['?isProcessed=0&acceptStatus=2', [2]],
         ];
     }
@@ -427,11 +427,22 @@ class OuterTicketDecisionTest extends TestCase
         $response->assertJsonPath('pagination.total', count($expected));
 
         $separator = $query === '' ? '?' : '&';
-        $page = min(2, count($expected));
+        $page = max(1, min(2, count($expected)));
         $this->getJson('/api/v1/outer-tickets'.$query.$separator.'pageSize=1&page='.$page)
-            ->assertOk()->assertJsonCount(1, 'clientOuterTickets')
+            ->assertOk()->assertJsonCount(min(1, count($expected)), 'clientOuterTickets')
             ->assertJsonPath('pagination.total', count($expected))
-            ->assertJsonPath('pagination.total_pages', count($expected));
+            ->assertJsonPath('pagination.total_pages', max(1, count($expected)));
+    }
+
+    public function test_acceptance_hides_request_from_listing_without_deleting_it(): void
+    {
+        $ticket = $this->ticket();
+        $this->getJson('/api/v1/outer-tickets')->assertOk()->assertJsonCount(1, 'clientOuterTickets');
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($ticket) + ['acceptStatus' => 1])->assertOk();
+        $this->getJson('/api/v1/outer-tickets')->assertOk()
+            ->assertJsonCount(0, 'clientOuterTickets')->assertJsonPath('pagination.total', 0);
+        $this->assertSame(1, $ticket->fresh()->accept_status);
+        $this->assertSame(1, DB::table('tickets')->where('client_outer_ticket_id', $ticket->id)->count());
     }
 
     public function test_invalid_filter_and_decision_are_rejected(): void

@@ -28,7 +28,9 @@ class ClientOuterTicketService{
 
     public function allClientOuterTickets(array $request){
 
-        $query = ClientOuterTicket::with('client');
+        $query = ClientOuterTicket::with('client')->where(function ($query) {
+            $query->whereIn('accept_status', [0, 2])->orWhereNull('accept_status');
+        });
 
         $filter = trim($request['acceptStatus'] ?? '');
         if ($filter !== '') {

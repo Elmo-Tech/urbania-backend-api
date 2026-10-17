@@ -15,6 +15,20 @@ use Illuminate\Support\Str;
 
 class ClientOuterTicketService{
 
+    private function externalTicketConnectTypeId(): int
+    {
+        $ids = DB::table('parameter_values')
+            ->where('parameter_id', 6) // connectType
+            ->whereNull('deleted_at')
+            ->whereRaw('LOWER(TRIM(parameter_value)) = ?', ['ticket esterno'])
+            ->limit(2)
+            ->pluck('id');
+
+        abort_unless($ids->count() === 1, 422, 'Ticket esterno connect type is missing or ambiguous.');
+
+        return (int) $ids->first();
+    }
+
     private function findTicketClientByIdentity(?string $clientIdentity): ?TicketClient
     {
         $clientIdentity = is_string($clientIdentity) ? trim($clientIdentity) : $clientIdentity;
@@ -54,6 +68,7 @@ class ClientOuterTicketService{
         $state = $clientOuterTicketData['stats'] ?? $clientOuterTicketData['state'] ?? null;
 
         $clientOuterTicket = ClientOuterTicket::create([
+            'connect_type_id' => $this->externalTicketConnectTypeId(),
             'privacy_accept' => (int) ($clientOuterTicketData['privacyAccept'] ?? 0),
             "firstname" => $clientOuterTicketData['firstname']??'',
             "lastname" => $clientOuterTicketData['lastname']??'',
@@ -251,7 +266,9 @@ class ClientOuterTicketService{
         $clientOuterTicket->ticket_client_id = $ticketClientId;
         $clientOuterTicket->notify_date = $clientOuterTicketData['notifyDate'] ?? null;
         $clientOuterTicket->end_date = $clientOuterTicketData['endDate'] ?? null;
-        $clientOuterTicket->connect_type_id = $clientOuterTicketData['connectTypeId'] ?? null;
+        if (array_key_exists('connectTypeId', $clientOuterTicketData)) {
+            $clientOuterTicket->connect_type_id = $clientOuterTicketData['connectTypeId'];
+        }
         $clientOuterTicket->esito = $clientOuterTicketData['esito'] ?? null;
         $clientOuterTicket->note = $clientOuterTicketData['note'] ?? null;
         $clientOuterTicket->segnalazione = $clientOuterTicketData['segnalazione'] ?? null;

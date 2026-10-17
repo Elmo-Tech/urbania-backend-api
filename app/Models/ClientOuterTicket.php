@@ -20,6 +20,7 @@ class ClientOuterTicket extends Model
     ];
 
     protected $fillable = [
+        'connect_type_id',
         'privacy_accept',
         'firstname',
         'lastname',

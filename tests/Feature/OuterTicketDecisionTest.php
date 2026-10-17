@@ -74,11 +74,93 @@ class OuterTicketDecisionTest extends TestCase
             });
         }
         $this->linkMigration()->up();
+        Schema::create('parameter_values', function (Blueprint $table) {
+            $table->id();
+            $table->string('parameter_value');
+            $table->text('description')->nullable();
+            $table->integer('parameter_id')->nullable();
+            $table->softDeletes();
+        });
+        DB::table('parameter_values')->insert([
+            'id' => 901, 'parameter_id' => 6, 'parameter_value' => 'Ticket esterno',
+        ]);
     }
 
     private function linkMigration()
     {
         return require database_path('migrations/2026_10_15_120000_add_client_outer_ticket_id_to_tickets.php');
+    }
+
+    public function test_external_connect_type_defaults_to_configured_id_and_survives_acceptance(): void
+    {
+        // Resolve the configured ID, including case/spacing, and ignore other groups/deleted options.
+        DB::table('parameter_values')->where('id', 901)->update([
+            'id' => 987, 'parameter_value' => ' TICKET ESTERNO ',
+        ]);
+        DB::table('parameter_values')->insert([
+            ['id' => 902, 'parameter_id' => 4, 'parameter_value' => 'Ticket esterno', 'deleted_at' => null],
+            ['id' => 903, 'parameter_id' => 6, 'parameter_value' => 'Ticket esterno', 'deleted_at' => now()],
+        ]);
+        $created = $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'connectTypeId' => 902,
+        ])->assertOk();
+        $outer = ClientOuterTicket::findOrFail($created->json('clientOuterTicketId'));
+        $this->assertEquals(987, $outer->connect_type_id);
+        $this->getJson('/api/v1/outer-tickets/edit?clientOuterTicketId='.$outer->id)
+            ->assertOk()->assertJsonPath('connectTypeId', '987');
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer))->assertOk();
+        $this->assertEquals(987, $outer->fresh()->connect_type_id);
+
+        // Acceptance must copy the stored ID, without looking up the default again.
+        DB::table('parameter_values')->where('id', 987)->update(['parameter_value' => 'Renamed option']);
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['acceptStatus' => 1])
+            ->assertOk();
+        $this->assertEquals(987, $outer->fresh()->connect_type_id);
+        $this->assertEquals(987, DB::table('tickets')->where('client_outer_ticket_id', $outer->id)->value('connect_type_id'));
+    }
+
+    public static function unavailableExternalConnectTypes(): array
+    {
+        return [
+            'missing' => [[]],
+            'wrong group' => [[['parameter_id' => 4, 'parameter_value' => 'Ticket esterno']]],
+            'soft deleted' => [[['parameter_id' => 6, 'parameter_value' => 'Ticket esterno', 'deleted_at' => '2026-01-01 00:00:00']]],
+            'ambiguous' => [[
+                ['parameter_id' => 6, 'parameter_value' => 'Ticket esterno'],
+                ['parameter_id' => 6, 'parameter_value' => 'TICKET ESTERNO'],
+            ]],
+        ];
+    }
+
+    #[DataProvider('unavailableExternalConnectTypes')]
+    public function test_invalid_default_prevents_external_creation_without_partial_writes(array $options): void
+    {
+        DB::table('parameter_values')->delete();
+        foreach ($options as $option) {
+            DB::table('parameter_values')->insert($option);
+        }
+        $this->postJson('/api/v1/client-outer-tickets/create', ['clientId' => 1, 'status' => 0])
+            ->assertStatus(422)->assertJsonPath('message', 'Ticket esterno connect type is missing or ambiguous.');
+        $this->assertSame(0, ClientOuterTicket::count());
+        $this->assertSame(0, DB::table('tickets')->count());
+        $this->assertSame([], Storage::disk('uploads')->allFiles());
+        Mail::assertNothingSent();
+    }
+
+    public function test_legacy_connect_type_is_not_backfilled_and_explicit_edits_still_work(): void
+    {
+        $outer = $this->ticket();
+        DB::table('parameter_values')->delete();
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer))->assertOk();
+        $this->assertNull($outer->fresh()->connect_type_id);
+        DB::table('parameter_values')->insert([
+            'id' => 904, 'parameter_id' => 6, 'parameter_value' => 'Email',
+        ]);
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['connectTypeId' => 904])->assertOk();
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['acceptStatus' => 1])->assertOk();
+        $this->assertEquals(904, DB::table('tickets')->value('connect_type_id'));
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['connectTypeId' => null])->assertOk();
+        $this->assertNull($outer->fresh()->connect_type_id);
     }
 
     public function test_reacceptance_keeps_one_linked_ticket_and_does_not_overwrite_it(): void
@@ -105,12 +187,6 @@ class OuterTicketDecisionTest extends TestCase
         $this->assertSame(1, $outer->fresh()->accept_status);
         Mail::assertSent(OuterTicketCreated::class, 1);
         Mail::assertSent(OuterTicketRejected::class, 1);
-        Schema::create('parameter_values', function (Blueprint $table) {
-            $table->id();
-            $table->text('description')->nullable();
-            $table->integer('parameter_id')->nullable();
-            $table->softDeletes();
-        });
         $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
         $this->getJson('/api/v1/tickets/edit?ticketId='.$internal->id)->assertOk()
             ->assertJsonMissingPath('clientOuterTicketId')->assertJsonMissingPath('client_outer_ticket_id');
@@ -210,17 +286,14 @@ class OuterTicketDecisionTest extends TestCase
     public function test_ai_ticket_contract_is_unchanged_and_public_input_is_validated(): void
     {
         Schema::table('clients', fn (Blueprint $table) => $table->integer('urbania_client')->default(1));
-        Schema::create('parameter_values', function (Blueprint $table) {
-            $table->id();
-            $table->string('parameter_value');
-            $table->softDeletes();
-        });
+        DB::table('parameter_values')->delete(); // AI does not depend on the external default.
         DB::table('clients')->insert(['id' => 1, 'company_name' => 'Test municipality']);
         $this->postJson('/api/v1/ai-client-outer-tickets/create', [
             'clientName' => 'Test municipality', 'status' => 0, 'privacyAccept' => 1,
             'serviceName' => '', 'istanzaParameterName' => '', 'delegatedRoleName' => '',
         ])->assertOk()->assertExactJson(['message' => 'ticket has been created !']);
         $this->assertSame(0, ClientOuterTicket::sole()->privacy_accept);
+        $this->assertNull(ClientOuterTicket::sole()->connect_type_id);
         $this->postJson('/api/v1/client-outer-tickets/create', [
             'clientId' => 1, 'status' => 0, 'privacyAccept' => 2,
         ])->assertStatus(401)->assertJsonStructure(['message' => ['privacyAccept']]);

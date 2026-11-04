@@ -104,10 +104,65 @@ class ItalianEmailTest extends TestCase
         $html = $mail->render();
 
         $this->assertSame('Original subject', $mail->subject);
-        $this->assertStringContainsString('<html lang="it">', $html);
-        $this->assertStringContainsString('<title>Nuova segnalazione creata</title>', $html);
-        $this->assertStringContainsString('<h1>Original subject</h1>', $html);
+        $this->assertStringContainsString('<html lang="it"', $html);
+        $this->assertStringContainsString('<title>Urbania | Assistenza</title>', $html);
+        $this->assertStringNotContainsString('Original subject', $html);
+        $this->assertStringNotContainsString('<h1>', $html);
         $this->assertStringContainsString(e($body), $html);
+    }
+
+    public function test_custom_email_uses_urbania_logo_and_configured_support_address(): void
+    {
+        config(['mail.from.address' => 'assistenza@example.test']);
+        $html = (new ClientTicketEmail('Private subject', 'Authored reply'))->render();
+        $document = new DOMDocument;
+        $document->loadHTML($html);
+        $logo = $document->getElementsByTagName('img')->item(0);
+
+        $this->assertSame('Logo Urbania', $logo->getAttribute('alt'));
+        $this->assertStringStartsWith('data:image/png;base64,', $logo->getAttribute('src'));
+        $this->assertSame(
+            file_get_contents(public_path('images/email/urbania-logo.png')),
+            base64_decode(substr($logo->getAttribute('src'), strlen('data:image/png;base64,')))
+        );
+        $this->assertContains('mailto:assistenza@example.test', $this->links($html));
+        $this->assertStringContainsString('Ufficio Assistenza', $html);
+        $this->assertStringNotContainsString('supporto@azienda.it', $html);
+        $this->assertStringNotContainsString('Private subject', $html);
+        $this->assertStringContainsString('Authored reply', $html);
+    }
+
+    public function test_custom_email_preserves_lines_spacing_and_signature_gap_without_rendering_authored_html(): void
+    {
+        foreach (["\n", "\r\n", "\r"] as $newline) {
+            $lines = [
+                'Buongiorno,',
+                '',
+                '  Riferimento:  123 & 456',
+                '<script>alert(1)</script>',
+                '',
+                '',
+                'Mario Rossi',
+                'Assistenza',
+            ];
+            $mail = new ClientTicketEmail('Ticket subject', implode($newline, $lines));
+            $html = $mail->render();
+            $document = new DOMDocument;
+            $document->loadHTML($html);
+            $content = $document->getElementsByTagName('div')->item(0);
+
+            $this->assertSame('Ticket subject', $mail->subject);
+            $this->assertStringNotContainsString('Ticket subject', $html);
+            $this->assertSame(0, $document->getElementsByTagName('script')->length);
+            $this->assertSame(count($lines) - 1, $content->getElementsByTagName('br')->length);
+            $this->assertStringContainsString('white-space: pre-wrap', $content->getAttribute('style'));
+
+            $renderedText = '';
+            foreach ($content->childNodes as $node) {
+                $renderedText .= $node->nodeName === 'br' ? "\n" : $node->textContent;
+            }
+            $this->assertSame(implode("\n", $lines), $renderedText);
+        }
     }
 
     private function links(string $html): array

@@ -92,8 +92,21 @@ class MicrosoftGraphMailTest extends TestCase
             && $request['message']['toRecipients'][0]['emailAddress']['address'] === 'recipient@example.com'
             && $request['message']['body']['contentType'] === 'HTML'
             && str_contains($request['message']['body']['content'], 'Ticket reply')
-            && base64_decode($request['message']['attachments'][0]['contentBytes']) === $bytes
+            && base64_decode(collect($request['message']['attachments'])->firstWhere('isInline', false)['contentBytes']) === $bytes
             && $request['saveToSentItems'] === true);
+
+        Http::assertSent(function (Request $request) {
+            if ($request->url() !== self::SEND_URL) {
+                return false;
+            }
+            $logo = collect($request['message']['attachments'])->firstWhere('isInline', true);
+
+            return $logo !== null
+                && $logo['contentType'] === 'image/png'
+                && base64_decode($logo['contentBytes']) === file_get_contents(public_path('images/email/urbania-logo.png'))
+                && str_contains($request['message']['body']['content'], 'cid:'.$logo['contentId'])
+                && ! str_contains($request['message']['body']['content'], 'Requested subject');
+        });
     }
 
     public function test_preserves_cc_bcc_reply_to_and_inline_images(): void
@@ -309,8 +322,8 @@ class MicrosoftGraphMailTest extends TestCase
         ], ['Accept' => 'application/json'])->assertOk()->assertJson(['message' => 'Email Sent!']);
 
         Http::assertSent(fn (Request $request) => $request->url() === self::SEND_URL
-            && $request['message']['attachments'][0]['name'] === $name
-            && base64_decode($request['message']['attachments'][0]['contentBytes']) === $bytes);
+            && collect($request['message']['attachments'])->firstWhere('isInline', false)['name'] === $name
+            && base64_decode(collect($request['message']['attachments'])->firstWhere('isInline', false)['contentBytes']) === $bytes);
         $this->assertSame([], Storage::disk('uploads')->allFiles());
     }
 

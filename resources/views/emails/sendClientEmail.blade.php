@@ -36,7 +36,7 @@
                 <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width: 100%; max-width: 600px; background-color: #ffffff; border: 1px solid #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 20px rgba(29, 34, 48, 0.08);">
                     <tr>
-                        <td class="email-header" bgcolor="#f9edf0" style="padding: 22px 32px; border-radius: 19px 19px 0 0; background-color: #f9edf0; background-image: linear-gradient(148deg, transparent 76%, rgba(186, 0, 10, 0.95) 76%), linear-gradient(161deg, transparent 70%, rgba(234, 35, 53, 0.45) 70%), linear-gradient(120deg, #fffafa 20%, #f7e8ed 72%, #f1b5bf 100%);">
+                        <td class="email-header" bgcolor="#f9edf0" style="padding: 22px 32px; border-radius: 19px 19px 0 0; background-color: #f9edf0; background-image: radial-gradient(ellipse 70% 140% at 120% 180%, #ba000a 98.5%, transparent 100%), radial-gradient(ellipse 90% 160% at 110% 180%, rgba(234, 35, 53, 0.38) 98.5%, transparent 100%), linear-gradient(120deg, #fffafa 20%, #f7e8ed 72%, #f1b5bf 100%);">
                             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td class="brand-logo-cell" width="80" valign="middle"><img class="brand-logo" src="{{ $logo }}" width="80" height="100" alt="Logo Urbania" style="display: block; width: 80px; height: auto; border: 0;"></td>

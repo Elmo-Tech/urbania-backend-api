@@ -7,6 +7,8 @@ use App\Http\Resources\Client\ClientResource;
 use App\Services\Client\AddressService;
 use App\Services\Client\ContactService;
 use App\Models\Client;
+use Illuminate\Database\Eloquent\Builder;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 
@@ -15,49 +17,56 @@ class ClientService{
     protected $addressService;
     protected $contactService;
     private $clients;
+    private $exportService;
 
-    public function __construct(AddressService $addressService, ContactService $contactService, Client $clients)
+    public function __construct(AddressService $addressService, ContactService $contactService, Client $clients, ClientExportService $exportService)
     {
         $this->addressService = $addressService;
         $this->contactService = $contactService;
         $this->clients = $clients;
+        $this->exportService = $exportService;
     }
 
     public function filterClients(Object $request){
-
-        $allClients = $this->clients->newQuery();
-        $allClients->where(function($query) use($request) {
-
-            $clientId = $request->clientId? ["=", $request->clientId]:["!=", "0"];
-            $cf = isset($request->cf) && $request->cf != null? ["LIKE", "%{$request->cf}%"]:null;
-            $tradeRegister = $request->tradeRegister != null? ["LIKE", "%{$request->tradeRegister}%"]: null; 
-            $peopleNumber = $request->peopleNumber;
-
-            if(strlen($peopleNumber) < 2){
-                $peopleNumber = [">=", "0"];
-            } else {
-                $peopleNumber = explode("|", $peopleNumber);
-            }
-            $query
-            ->where('id', $clientId[0], $clientId[1])
-            ->when(isset($request->tradeRegister), function ($query) use ($tradeRegister) {
-                return $query->where('trade_register', $tradeRegister[0], $tradeRegister[1]);
-            })
-            ->when(isset($request->peopleNumber), function ($query) use ($peopleNumber) {
-                return $query->where('people_number', "{$peopleNumber[0]}", (int)$peopleNumber[1]);
-            })
-            ->when(isset($request->cf), function ($query) use ($cf) {
-                return $query->where('cf', $cf[0], $cf[1]);
-            })
-            ->whereNull('deleted_at');
-        })->get();
-
+        $allClients = $this->filteredClientsQuery($request);
 
         return response()->json([
             'clientPage' => new AllClientCollection($allClients->paginate($request->pageSize))
         ], 200);
 
     }
+
+    public function exportClients(Object $request): StreamedResponse
+    {
+        return $this->exportService->download(
+            $this->filteredClientsQuery($request),
+            $request->exportType
+        );
+    }
+
+    private function filteredClientsQuery(Object $request): Builder
+    {
+        $query = $this->clients->newQuery();
+        $query->where('id', $request->clientId ? '=' : '!=', $request->clientId ?: 0);
+
+        if (isset($request->tradeRegister) && $request->tradeRegister !== '') {
+            $query->where('trade_register', 'LIKE', "%{$request->tradeRegister}%");
+        }
+
+        if (isset($request->cf) && $request->cf !== '') {
+            $query->where('cf', 'LIKE', "%{$request->cf}%");
+        }
+
+        if (isset($request->peopleNumber)) {
+            [$operator, $number] = strlen($request->peopleNumber) < 2
+                ? ['>=', 0]
+                : explode('|', $request->peopleNumber, 2);
+            $query->where('people_number', $operator, (int) $number);
+        }
+
+        return $query->whereNull('deleted_at');
+    }
+
     public function createClient(array $userData, array $clientAddresses, array $clientContacts){
         
        $client = Client::create([

@@ -338,6 +338,7 @@ Route::prefix('v1/auth')->group(function(){
 
 Route::prefix('v1/clients')->group(function(){
     Route::get('', [ClientController::class, 'allclients']);
+    Route::get('export', [ClientController::class, 'export']);
     Route::post('create', [ClientController::class, 'create']);
     Route::get('edit', [ClientController::class, 'edit']);
     Route::put('update', [ClientController::class, 'update']);

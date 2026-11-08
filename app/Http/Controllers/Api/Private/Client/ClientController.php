@@ -11,6 +11,7 @@ use App\Http\Requests\Client\Address\CreateAddressRequest;
 use App\Http\Requests\Client\Contact\CreateContactRequest;
 use App\Services\Client\ClientService;
 use App\Http\Requests\Client\CreateClientRequest;
+use App\Http\Requests\Client\ExportClientsRequest;
 use App\Http\Requests\Client\UpdateClientRequsest;
 
 use Illuminate\Http\Request;
@@ -30,6 +31,11 @@ class ClientController extends Controller
     public function allclients(Request $request)
     {
         return $this->clientService->filterClients($request);
+    }
+
+    public function export(ExportClientsRequest $request)
+    {
+        return $this->clientService->exportClients($request);
     }
 
     /**

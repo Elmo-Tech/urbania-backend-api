@@ -1,5 +1,77 @@
 # ملخص تغييرات الـAPI
 
+## سنوات متعددة للتذكرة الخارجية
+
+```http
+POST /api/v1/client-outer-tickets/create
+PUT /api/v1/outer-tickets/update
+```
+
+الطلب قبل:
+
+```json
+{"anno": 2024}
+```
+
+الطلب بعد، مع استمرار دعم السنة الواحدة:
+
+```json
+{"anno": [2023, 2024, 2025]}
+```
+
+رد النجاح لم يتغير. تفاصيل التذكرة:
+
+```http
+GET /api/v1/outer-tickets/edit?clientOuterTicketId=42
+```
+
+الرد قبل:
+
+```json
+{"anno": "2024"}
+```
+
+الرد بعد:
+
+```json
+{"anno": ["2023", "2024", "2025"]}
+```
+
+قائمة الخارجية تضيف `anno` كنص لكل صف:
+
+```http
+GET /api/v1/outer-tickets
+```
+
+```json
+{"anno": "2023,2024,2025"}
+```
+
+الأمثلة للحقول المتغيرة فقط. تفاصيل الفرونت: [TICKET_MULTI_YEAR.md](TICKET_MULTI_YEAR.md).
+
+## إعادة إرسال إيميل قبول التذكرة الداخلية
+
+واجهة جديدة، تتطلب صلاحية `updateTicket`:
+
+```http
+POST /api/v1/tickets/reconfirm-email
+Authorization: Bearer <token>
+```
+
+الطلب:
+
+```json
+{"ticketId": 42}
+```
+
+الرد — `200`:
+
+```json
+{"message": "Email reinviata correttamente."}
+```
+
+المستلم هو إيميل جهة الاتصال الحالي في التذكرة الداخلية. التفاصيل: [TICKET_EMAIL_RESEND.md](TICKET_EMAIL_RESEND.md).
+
 ## التذاكر الخارجية
 
 | الراوت | الـkey | التغيير |

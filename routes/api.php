@@ -294,6 +294,7 @@ use App\Http\Controllers\Api\Private\DashboardController;
 use App\Http\Controllers\Api\Private\Parameter\ParameterController;
 use App\Http\Controllers\Api\Private\Select\SelectController;
 use App\Http\Controllers\Api\Private\Ticket\TicketController;
+use App\Http\Controllers\Api\Private\Ticket\TicketEmailController;
 use App\Http\Controllers\Api\Private\Ticket\SendEmailController;
 use App\Http\Controllers\Api\Private\Mail\MailerController;
 use App\Http\Controllers\Api\Private\TicketClient\TicketClientController;
@@ -431,6 +432,7 @@ Route::prefix('v1/selects')->group(function(){
 
 Route::prefix('v1/tickets')->group(function(){
     Route::get('', [TicketController::class, 'alltickets']);
+    Route::post('reconfirm-email', [TicketEmailController::class, 'resend']);
     Route::post('create', [TicketController::class, 'create']);
     Route::get('edit', [TicketController::class, 'edit']);
     Route::put('update', [TicketController::class, 'update']);

@@ -101,11 +101,12 @@ class TicketService{
         ->when(isset($request->companyId), function ($query) use ($companyId) {
             return $query->where('contracts.company_id', $companyId[0], $companyId[1]);
         })
-        ->when(isset($request->anno), function ($query) use ($anno) {
-            foreach ($anno as $value) {
-                $query->orWhere('tickets.anno', 'LIKE', '%' . $value . '%');
-            }
-            return $query;
+        ->when($anno, function ($query) use ($anno) {
+            return $query->where(function ($yearsQuery) use ($anno) {
+                foreach ($anno as $value) {
+                    $yearsQuery->orWhere('tickets.anno', 'LIKE', '%' . $value . '%');
+                }
+            });
         })
         ->when(($remain == 1), function ($query) use ($remain) {
             return $query->whereRaw('DATEDIFF(DATE_ADD(notify_date, INTERVAL 60 DAY), NOW()) <= ?', [15]);

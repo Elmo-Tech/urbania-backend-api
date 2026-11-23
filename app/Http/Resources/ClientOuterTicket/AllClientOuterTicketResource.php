@@ -24,6 +24,7 @@ class AllClientOuterTicketResource extends JsonResource
             'email' => $this->email,
             'phone' => $this->phone,
             'date' => $this->date,
+            'anno' => $this->anno ?? '',
             'status' => $this->status,
             'acceptStatus' => $this->accept_status,
             'rejectionReason' => $this->rejection_reason,

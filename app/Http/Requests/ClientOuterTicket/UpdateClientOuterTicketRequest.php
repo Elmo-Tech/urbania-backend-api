@@ -2,12 +2,16 @@
 
 namespace App\Http\Requests\ClientOuterTicket;
 
+use App\Http\Requests\Concerns\NormalizesTicketYears;
+use App\Utils\TicketYears;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Contracts\Validation\Validator;
 
 class UpdateClientOuterTicketRequest extends FormRequest
 {
+    use NormalizesTicketYears;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -50,7 +54,8 @@ class UpdateClientOuterTicketRequest extends FormRequest
             'esito' => 'nullable',
             'notifyDate' => 'nullable',
             'connectTypeId' => 'nullable',
-            'anno' => 'nullable',
+            'anno' => 'exclude_if:acceptStatus,2|nullable|array|max:'.TicketYears::MAX_YEARS,
+            'anno.*' => 'required|integer|between:1000,9999',
             'note' => 'nullable',
             'segnalazione' => 'nullable',
             'urgenza' => 'nullable',

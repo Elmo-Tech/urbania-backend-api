@@ -8,6 +8,7 @@ use App\Models\Ticket;
 use App\Models\TicketClient;
 use App\Models\TicketClientAddress;
 use App\Models\TicketClientContact;
+use App\Utils\TicketYears;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -85,7 +86,7 @@ class ClientOuterTicketService{
             'state' => $state,
             "phone" => $clientOuterTicketData['phone']??'',
             'status' => $clientOuterTicketData['status']??0,
-            'anno' => $clientOuterTicketData['anno']??'',
+            'anno' => TicketYears::toStorage($clientOuterTicketData['anno'] ?? null),
             'service_id' => $clientOuterTicketData['serviceId']??null, //motivo select will come from description or another field
             'istanza_parameter_id' => $clientOuterTicketData['istanzaParameterId']??null,
             'delegated_role_id' => $clientOuterTicketData['delegatedRoleId']??null,
@@ -146,7 +147,9 @@ class ClientOuterTicketService{
         $clientOuterTicket->state = $state;
         $clientOuterTicket->phone = $clientOuterTicketData['phone'] ?? '';
         $clientOuterTicket->status = $newStatus;
-        $clientOuterTicket->anno = $clientOuterTicketData['anno'] ?? '';
+        if (array_key_exists('anno', $clientOuterTicketData)) {
+            $clientOuterTicket->anno = TicketYears::toStorage($clientOuterTicketData['anno']);
+        }
         $clientOuterTicket->service_id = $clientOuterTicketData['serviceId'] ?? null;
         $clientOuterTicket->istanza_parameter_id = $istanzaParameterId;
         $clientOuterTicket->delegated_role_id = $clientOuterTicketData['delegatedRoleId'] ?? null;

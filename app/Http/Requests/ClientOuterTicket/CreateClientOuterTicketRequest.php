@@ -2,12 +2,16 @@
 
 namespace App\Http\Requests\ClientOuterTicket;
 
+use App\Http\Requests\Concerns\NormalizesTicketYears;
+use App\Utils\TicketYears;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Contracts\Validation\Validator;
 
 class CreateClientOuterTicketRequest extends FormRequest
 {
+    use NormalizesTicketYears;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -40,7 +44,8 @@ class CreateClientOuterTicketRequest extends FormRequest
             'delegatedLastname' => 'nullable|string|max:255',
             'delegatedPhone' => 'nullable|string|max:20',
             'message' => 'nullable|string',
-            'anno' => 'nullable|integer',
+            'anno' => 'nullable|array|max:'.TicketYears::MAX_YEARS,
+            'anno.*' => 'required|integer|between:1000,9999',
             'emailToken' => 'nullable|string|max:255',
             'status' => 'required',
             'serviceId' => 'nullable|integer',

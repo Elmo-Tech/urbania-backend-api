@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\ClientOuterTicket;
 
+use App\Utils\TicketYears;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -34,7 +35,7 @@ class ClientOuterTicketResource extends JsonResource
             'stats' => $this->state,
             'message' => $this->message,
             'description' => $this->message,
-            'anno' => $this->anno,
+            'anno' => TicketYears::fromStorage($this->anno),
             'status' => $this->status,
             'serviceId' => $this->service_id,
             'istanzaParameterId' => $this->istanza_parameter_id,

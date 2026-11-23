@@ -8,6 +8,7 @@ use App\Models\ClientOuterTicket;
 use App\Models\User;
 use Illuminate\Database\MySqlConnection;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
@@ -89,6 +90,201 @@ class OuterTicketDecisionTest extends TestCase
     private function linkMigration()
     {
         return require database_path('migrations/2026_10_15_120000_add_client_outer_ticket_id_to_tickets.php');
+    }
+
+    #[DataProvider('yearSelections')]
+    public function test_external_years_are_saved_as_csv_and_returned_as_array(mixed $selection, string $stored, array $years): void
+    {
+        $response = $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'anno' => $selection,
+        ])->assertOk();
+        $id = $response->json('clientOuterTicketId');
+        $this->assertDatabaseHas('client_outer_tickets', ['id' => $id, 'anno' => $stored]);
+        $this->getJson('/api/v1/outer-tickets/edit?clientOuterTicketId='.$id)
+            ->assertOk()->assertJsonPath('anno', $years);
+        $this->getJson('/api/v1/outer-tickets')->assertOk()
+            ->assertJsonPath('clientOuterTickets.0.anno', $stored);
+        $this->assertSame(1, ClientOuterTicket::count());
+        Mail::assertNothingSent();
+    }
+
+    public static function yearSelections(): array
+    {
+        return [
+            'multiple numbers' => [[2023, 2024, 2025], '2023,2024,2025', ['2023', '2024', '2025']],
+            'legacy number' => [2024, '2024', ['2024']],
+            'legacy string' => ['2024', '2024', ['2024']],
+            'legacy csv' => ['2023, 2024,2025', '2023,2024,2025', ['2023', '2024', '2025']],
+            'strings whitespace duplicates' => [['2025', ' 2023 ', 2025, '2024'], '2025,2023,2024', ['2025', '2023', '2024']],
+            'canonical numeric strings' => [['+2024', 2024, '2025'], '2024,2025', ['2024', '2025']],
+            'empty selection' => [[], '', []],
+            'null' => [null, '', []],
+            'blank legacy input' => ['', '', []],
+        ];
+    }
+
+    public function test_external_years_work_with_multipart_attachment_uploads(): void
+    {
+        $response = $this->post('/api/v1/client-outer-tickets/create', [
+            'clientId' => '1', 'status' => '0', 'anno' => ['2023', '2024'],
+            'files' => [UploadedFile::fake()->createWithContent('request.pdf', 'PDF content')->mimeType('application/pdf')],
+        ], ['Accept' => 'application/json'])->assertOk();
+        $id = $response->json('clientOuterTicketId');
+        $this->assertDatabaseHas('client_outer_tickets', ['id' => $id, 'anno' => '2023,2024']);
+        $this->assertCount(1, Storage::disk('uploads')->allFiles('outertickets/'.$id));
+    }
+
+    public function test_years_survive_external_edit_acceptance_and_internal_edit_without_extra_tickets(): void
+    {
+        $created = $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'anno' => [2023, 2024, 2025],
+        ])->assertOk();
+        $outer = ClientOuterTicket::findOrFail($created->json('clientOuterTicketId'));
+
+        // An ordinary save omitting anno must not erase the existing selection.
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer))->assertOk();
+        $this->assertSame('2023,2024,2025', $outer->fresh()->anno);
+
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['anno' => [2022, 2024]])->assertOk();
+        $this->assertSame('2022,2024', $outer->fresh()->anno);
+        $this->putJson('/api/v1/outer-tickets/update', array_replace($this->fullUpdate($outer), [
+            'ticketClientId' => null, 'acceptStatus' => 1,
+        ]))->assertOk();
+        $internal = \App\Models\Ticket::sole();
+        $this->assertSame('2022,2024', $internal->anno);
+        $this->assertSame($outer->id, (int) $internal->client_outer_ticket_id);
+        Mail::assertSent(OuterTicketCreated::class, 1);
+
+        DB::table('parameter_values')->insert([
+            'id' => 91, 'parameter_id' => 17, 'parameter_value' => 'Non urgente', 'description' => '0',
+        ]);
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $detail = $this->getJson('/api/v1/tickets/edit?ticketId='.$internal->id)
+            ->assertOk()->assertJsonPath('anno', ['2022', '2024'])->json();
+        $this->putJson('/api/v1/tickets/update', array_replace($detail, [
+            'ticketClientId' => '0', 'clientId' => 1, 'contractId' => '18##16', 'serviceId' => 27,
+            'workerId' => '', 'notifyDate' => null, 'anno' => ['2021', '2022', '2024'],
+        ]))->assertOk();
+        $this->assertSame('2021,2022,2024', $internal->fresh()->anno);
+        $this->assertSame('2022,2024', $outer->fresh()->anno);
+
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['acceptStatus' => 1])->assertOk();
+        $this->assertSame(1, \App\Models\Ticket::count());
+        $this->assertSame('2021,2022,2024', $internal->fresh()->anno);
+        Mail::assertSent(OuterTicketCreated::class, 1);
+    }
+
+    public function test_existing_single_year_and_empty_records_can_be_read_and_updated(): void
+    {
+        $outer = $this->ticket();
+        foreach (['2020' => ['2020'], '' => []] as $stored => $years) {
+            $outer->anno = (string) $stored;
+            $outer->save();
+            $this->getJson('/api/v1/outer-tickets/edit?clientOuterTicketId='.$outer->id)
+                ->assertOk()->assertJsonPath('anno', $years);
+        }
+        foreach ([2021, '2021', '2021,2022', [2021, 2022]] as $selection) {
+            $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['anno' => $selection])->assertOk();
+            $this->assertSame(is_array($selection) ? '2021,2022' : (string) $selection, $outer->fresh()->anno);
+        }
+        foreach ([[], null, ''] as $selection) {
+            $outer->anno = '2023,2024';
+            $outer->save();
+            $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + ['anno' => $selection])->assertOk();
+            $this->assertSame('', $outer->fresh()->anno);
+        }
+    }
+
+    public function test_rejection_preserves_years_even_when_unrelated_year_input_is_supplied(): void
+    {
+        $outer = $this->ticket();
+        $outer->anno = '2023,2024';
+        $outer->save();
+        $this->putJson('/api/v1/outer-tickets/update', [
+            'clientOuterTicketId' => $outer->id, 'acceptStatus' => 2,
+            'rejectionReason' => 'Missing document', 'anno' => ['invalid'],
+        ])->assertOk();
+        $this->assertSame('2023,2024', $outer->fresh()->anno);
+        Mail::assertSent(OuterTicketRejected::class, 1);
+    }
+
+    #[DataProvider('invalidYearSelections')]
+    public function test_invalid_year_selection_cannot_create_edit_or_accept_a_ticket(mixed $selection): void
+    {
+        $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'anno' => $selection,
+        ])->assertStatus(401)->assertJsonStructure(['message']);
+        $this->assertSame(0, ClientOuterTicket::count());
+
+        $outer = $this->ticket();
+        $outer->anno = '2023,2024';
+        $outer->save();
+        $before = $outer->fresh()->getRawOriginal();
+        $this->putJson('/api/v1/outer-tickets/update', $this->fullUpdate($outer) + [
+            'anno' => $selection, 'acceptStatus' => 1,
+        ])->assertStatus(401)->assertJsonStructure(['message']);
+        $this->assertSame($before, $outer->fresh()->getRawOriginal());
+        $this->assertSame(0, \App\Models\Ticket::count());
+        Mail::assertNothingSent();
+    }
+
+    public static function invalidYearSelections(): array
+    {
+        return [
+            'text' => ['invalid'], 'boolean' => [true], 'fraction' => [2024.5],
+            'small year' => [999], 'large year' => [10000], 'negative' => [-2024],
+            'nested array' => [[[2024]]], 'null item' => [[2024, null]],
+            'empty item' => [[2024, '']], 'invalid item' => [[2024, 'bad']],
+            'fractional item' => [[2024.5]], 'empty csv item' => ['2023,,2024'],
+            'trailing csv separator' => ['2023,'], 'too many years' => [range(2000, 2051)],
+        ];
+    }
+
+    public function test_maximum_year_selection_fits_existing_varchar_and_missing_input_remains_optional(): void
+    {
+        $years = range(2000, 2050);
+        $response = $this->postJson('/api/v1/client-outer-tickets/create', [
+            'clientId' => 1, 'status' => 0, 'anno' => $years,
+        ])->assertOk();
+        $stored = ClientOuterTicket::findOrFail($response->json('clientOuterTicketId'))->anno;
+        $this->assertSame(implode(',', $years), $stored);
+        $this->assertSame(254, strlen($stored));
+
+        $response = $this->postJson('/api/v1/client-outer-tickets/create', ['clientId' => 1, 'status' => 0])->assertOk();
+        $this->assertSame('', ClientOuterTicket::findOrFail($response->json('clientOuterTicketId'))->anno);
+    }
+
+    public function test_year_filter_matches_selected_years_without_bypassing_other_filters_or_deleted_rows(): void
+    {
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->text('firstname')->nullable();
+            $table->text('lastname')->nullable();
+            $table->text('username')->nullable();
+        });
+        Schema::create('contracts', function (Blueprint $table) {
+            $table->id();
+            $table->integer('company_id')->nullable();
+        });
+        foreach ([
+            [1, 1, 1, '2023,2024', null], // Match.
+            [2, 1, 1, '2025', null], // Match second selected year.
+            [3, 1, 1, '2022', null], // Wrong year.
+            [4, 2, 1, '2023', null], // Wrong client.
+            [5, 1, 2, '2023', null], // Wrong status.
+            [6, 1, 1, '2023', '2026-01-01 00:00:00'], // Deleted.
+        ] as [$id, $clientId, $status, $years, $deletedAt]) {
+            DB::table('tickets')->insert([
+                'id' => $id, 'client_id' => $clientId, 'status' => $status,
+                'anno' => $years, 'urgenza' => '0', 'deleted_at' => $deletedAt,
+            ]);
+        }
+        $this->withoutMiddleware(\App\Http\Middleware\JWTAuthentication::class);
+        $response = $this->getJson('/api/v1/tickets?clientId=1&status=1&anno=2023,2025')->assertOk();
+        $this->assertEqualsCanonicalizing([1, 2], array_column($response->json('ticketPage.tickets'), 'ticketId'));
+        $response->assertJsonPath('ticketPage.pagination.total', 2);
+        $this->getJson('/api/v1/tickets?clientId=1&status=1&anno=')
+            ->assertOk()->assertJsonPath('ticketPage.pagination.total', 3);
     }
 
     public function test_external_connect_type_defaults_to_configured_id_and_survives_acceptance(): void
